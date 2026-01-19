@@ -5,9 +5,10 @@
 git fetch origin master
 git reset --hard origin/master
 
-# Copy .env file from parent directory
-if [ -f ../.env ]; then
-    cp ../.env .env
+# Copy .env file from main worktree
+MAIN_WORKTREE=$(git worktree list | head -1 | awk '{print $1}')
+if [ -f "$MAIN_WORKTREE/.env" ]; then
+    cp "$MAIN_WORKTREE/.env" .env
 fi
 
 # Install Python dependencies with uv (fast) or pip as fallback
