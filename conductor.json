@@ -1,3 +1,5 @@
 {
-  "setup": "bash worktree-setup.sh"
+    "scripts": {
+        "setup": "./worktree-setup.sh"
+    }
 }
