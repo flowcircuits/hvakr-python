@@ -15,7 +15,10 @@ fi
 
 # Install Python dependencies with uv (fast) or pip as fallback
 if command -v uv &> /dev/null; then
+    uv venv
     uv pip install -e '.[dev]'
 else
+    python -m venv .venv
+    source .venv/bin/activate
     pip install -e '.[dev]'
 fi
