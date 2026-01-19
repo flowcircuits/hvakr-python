@@ -5,12 +5,9 @@
 git fetch origin master
 git reset --hard origin/master
 
-# Copy .env file from parent directory if it exists, otherwise from example
+# Copy .env file from parent directory
 if [ -f ../.env ]; then
     cp ../.env .env
-elif [ -f .env.example ] && [ ! -f .env ]; then
-    cp .env.example .env
-    echo 'Created .env from .env.example - please add your HVAKR_API_TOKEN'
 fi
 
 # Install Python dependencies with uv (fast) or pip as fallback
