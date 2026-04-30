@@ -1,6 +1,7 @@
 """HVAKR API client."""
 
 from typing import Literal, overload
+from urllib.parse import quote
 
 import httpx
 
@@ -64,6 +65,11 @@ class HVAKRClient:
         """Get authentication headers."""
         return {"Authorization": f"Bearer {self._access_token}"}
 
+    @staticmethod
+    def _encode_path_segment(segment: str) -> str:
+        """URL-encode a path segment."""
+        return quote(segment, safe="")
+
     def _create_url(
         self,
         path: str,
@@ -78,15 +84,18 @@ class HVAKRClient:
         Returns:
             The full URL string.
         """
-        url = f"{self._base_url}/{self._version}{path}"
+        base = self._base_url.rstrip("/")
+        url = f"{base}/{self._version}{path}"
         if query_params:
             params = []
             for key, value in query_params.items():
                 if isinstance(value, bool):
                     if value:
-                        params.append(key)
+                        params.append(quote(key, safe=""))
                 elif value:
-                    params.append(f"{key}={value}")
+                    params.append(
+                        f"{quote(key, safe='')}={quote(str(value), safe='')}"
+                    )
             if params:
                 url += "?" + "&".join(params)
         return url
@@ -107,14 +116,14 @@ class HVAKRClient:
             data = response.json()
         except Exception as e:
             raise HVAKRClientError(
-                f"Failed to parse JSON response",
+                "Failed to parse JSON response",
                 status_code=response.status_code,
                 metadata={"error": str(e)},
             ) from e
 
         if not response.is_success:
             raise HVAKRClientError(
-                f"API request failed",
+                "API request failed",
                 status_code=response.status_code,
                 metadata=data,
             )
@@ -210,7 +219,10 @@ class HVAKRClient:
         Raises:
             HVAKRClientError: If the API returns an error response.
         """
-        url = self._create_url(f"/projects/{project_id}", {"expand": expand})
+        url = self._create_url(
+            f"/projects/{self._encode_path_segment(project_id)}",
+            {"expand": expand},
+        )
         response = self._http_client.get(url, headers=self._get_auth_headers())
         data = self._handle_response(response)
         if expand:
@@ -236,7 +248,10 @@ class HVAKRClient:
         Raises:
             HVAKRClientError: If the API returns an error response.
         """
-        url = self._create_url(f"/projects/{project_id}", {"revitPayload": revit_payload})
+        url = self._create_url(
+            f"/projects/{self._encode_path_segment(project_id)}",
+            {"revitPayload": revit_payload},
+        )
 
         if isinstance(project_data, dict):
             body = project_data
@@ -266,7 +281,7 @@ class HVAKRClient:
         Raises:
             HVAKRClientError: If the API returns an error response.
         """
-        url = self._create_url(f"/projects/{project_id}")
+        url = self._create_url(f"/projects/{self._encode_path_segment(project_id)}")
         response = self._http_client.delete(url, headers=self._get_auth_headers())
         return self._handle_response(response)
 
@@ -304,7 +319,10 @@ class HVAKRClient:
         Raises:
             HVAKRClientError: If the API returns an error or JSON parsing fails.
         """
-        url = self._create_url(f"/projects/{project_id}/outputs/{output_type}")
+        url = self._create_url(
+            f"/projects/{self._encode_path_segment(project_id)}"
+            f"/outputs/{self._encode_path_segment(output_type)}"
+        )
         response = self._http_client.get(url, headers=self._get_auth_headers())
         data = self._handle_response(response)
 
@@ -349,7 +367,9 @@ class HVAKRClient:
         Raises:
             HVAKRClientError: If the API returns an error response.
         """
-        url = self._create_url(f"/weather-stations/{weather_station_id}")
+        url = self._create_url(
+            f"/weather-stations/{self._encode_path_segment(weather_station_id)}"
+        )
         response = self._http_client.get(url, headers=self._get_auth_headers())
         data = self._handle_response(response)
         return WeatherStationData.model_validate(data)
@@ -403,21 +423,29 @@ class AsyncHVAKRClient:
         """Get authentication headers."""
         return {"Authorization": f"Bearer {self._access_token}"}
 
+    @staticmethod
+    def _encode_path_segment(segment: str) -> str:
+        """URL-encode a path segment."""
+        return quote(segment, safe="")
+
     def _create_url(
         self,
         path: str,
         query_params: dict[str, str | bool] | None = None,
     ) -> str:
         """Construct a full API URL with optional query parameters."""
-        url = f"{self._base_url}/{self._version}{path}"
+        base = self._base_url.rstrip("/")
+        url = f"{base}/{self._version}{path}"
         if query_params:
             params = []
             for key, value in query_params.items():
                 if isinstance(value, bool):
                     if value:
-                        params.append(key)
+                        params.append(quote(key, safe=""))
                 elif value:
-                    params.append(f"{key}={value}")
+                    params.append(
+                        f"{quote(key, safe='')}={quote(str(value), safe='')}"
+                    )
             if params:
                 url += "?" + "&".join(params)
         return url
@@ -428,14 +456,14 @@ class AsyncHVAKRClient:
             data = response.json()
         except Exception as e:
             raise HVAKRClientError(
-                f"Failed to parse JSON response",
+                "Failed to parse JSON response",
                 status_code=response.status_code,
                 metadata={"error": str(e)},
             ) from e
 
         if not response.is_success:
             raise HVAKRClientError(
-                f"API request failed",
+                "API request failed",
                 status_code=response.status_code,
                 metadata=data,
             )
@@ -502,7 +530,10 @@ class AsyncHVAKRClient:
         expand: bool = False,
     ) -> Project | ExpandedProject:
         """Retrieve a project by ID."""
-        url = self._create_url(f"/projects/{project_id}", {"expand": expand})
+        url = self._create_url(
+            f"/projects/{self._encode_path_segment(project_id)}",
+            {"expand": expand},
+        )
         response = await self._http_client.get(url, headers=self._get_auth_headers())
         data = await self._handle_response(response)
         if expand:
@@ -516,7 +547,10 @@ class AsyncHVAKRClient:
         revit_payload: bool = False,
     ) -> dict:
         """Update an existing HVAKR project."""
-        url = self._create_url(f"/projects/{project_id}", {"revitPayload": revit_payload})
+        url = self._create_url(
+            f"/projects/{self._encode_path_segment(project_id)}",
+            {"revitPayload": revit_payload},
+        )
 
         if isinstance(project_data, dict):
             body = project_data
@@ -536,7 +570,7 @@ class AsyncHVAKRClient:
 
     async def delete_project(self, project_id: str) -> dict:
         """Delete an HVAKR project."""
-        url = self._create_url(f"/projects/{project_id}")
+        url = self._create_url(f"/projects/{self._encode_path_segment(project_id)}")
         response = await self._http_client.delete(url, headers=self._get_auth_headers())
         return await self._handle_response(response)
 
@@ -563,7 +597,10 @@ class AsyncHVAKRClient:
         output_type: Literal["loads", "dryside_graph", "register_schedule"],
     ) -> APIProjectOutputLoads | APIProjectOutputDrySideGraph | APIProjectOutputRegisterSchedule:
         """Retrieve calculated outputs for a project."""
-        url = self._create_url(f"/projects/{project_id}/outputs/{output_type}")
+        url = self._create_url(
+            f"/projects/{self._encode_path_segment(project_id)}"
+            f"/outputs/{self._encode_path_segment(output_type)}"
+        )
         response = await self._http_client.get(url, headers=self._get_auth_headers())
         data = await self._handle_response(response)
 
@@ -589,7 +626,9 @@ class AsyncHVAKRClient:
 
     async def get_weather_station(self, weather_station_id: str) -> WeatherStationData:
         """Retrieve detailed data for a specific weather station."""
-        url = self._create_url(f"/weather-stations/{weather_station_id}")
+        url = self._create_url(
+            f"/weather-stations/{self._encode_path_segment(weather_station_id)}"
+        )
         response = await self._http_client.get(url, headers=self._get_auth_headers())
         data = await self._handle_response(response)
         return WeatherStationData.model_validate(data)

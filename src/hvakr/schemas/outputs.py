@@ -1,20 +1,17 @@
 """Output schema definitions for API responses."""
 
 from enum import Enum
-from typing import Any, Literal, Union
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-from hvakr.schemas.common import Point
+from hvakr.schemas.common import Point, Size
 from hvakr.schemas.graph import (
-    AdjacencyType,
-    DuctAdjacencyData,
+    DuctSize,
     FlowType,
-    LinkAdjacencyData,
     NodeType,
     RegisterPlacementType,
     Selection,
-    Size,
 )
 
 
@@ -270,7 +267,7 @@ class MetaDrySideDuctAdjacency(BaseModel):
 
     id: str
     adjacency_type: Literal["DUCT"] = Field(alias="adjacencyType")
-    duct_size: dict[str, Any] | None = Field(default=None, alias="ductSize")
+    duct_size: DuctSize | None = Field(default=None, alias="ductSize")
     duct_type_id: str | None = Field(default=None, alias="ductTypeId")
     flow_rate: float | None = Field(default=None, alias="flowRate")
 
@@ -286,7 +283,7 @@ class MetaDrySideLinkAdjacency(BaseModel):
     model_config = {"populate_by_name": True}
 
 
-MetaDrySideAdjacencyData = Union[MetaDrySideDuctAdjacency, MetaDrySideLinkAdjacency]
+MetaDrySideAdjacencyData = MetaDrySideDuctAdjacency | MetaDrySideLinkAdjacency
 
 
 class MetaDrySideGraphNode(BaseModel):
