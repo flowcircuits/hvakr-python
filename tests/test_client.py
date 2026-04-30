@@ -10,7 +10,6 @@ from hvakr import (
     Project,
     WeatherStationData,
 )
-from hvakr.schemas.outputs import APIProjectOutputLoads
 
 
 class TestHVAKRClient:

@@ -28,35 +28,38 @@ Example:
 from hvakr.client import AsyncHVAKRClient, HVAKRClient
 from hvakr.exceptions import HVAKRClientError
 from hvakr.schemas import (
-    # Common
-    Box,
-    DisplayUnitSystemId,
-    Point,
-    Polygon,
-    Rect,
-    Size,
-    # Graph
-    FlowType,
-    Graph,
-    GraphNode,
-    NodeType,
-    # Outputs
     APIOutputType,
     APIProjectOutputDrySideGraph,
     APIProjectOutputLoads,
     APIProjectOutputRegisterSchedule,
-    # Project
+    Box,
+    DisplayUnitSystemId,
     ExpandedProject,
     ExpandedProjectPatch,
     ExpandedProjectPost,
+    FlowType,
+    Graph,
+    GraphNode,
+    KnownWebhookEvent,
+    NodeType,
+    OpportunityCreatedEvent,
+    OpportunityCreatedPayload,
+    Point,
+    Polygon,
     Project,
+    ProjectCreatedEvent,
+    ProjectCreatedPayload,
     ProjectData,
     ProjectPost,
-    # Revit
+    Rect,
     RevitData,
-    # Weather
+    Size,
+    UnknownWebhookEvent,
     WeatherStationData,
+    WebhookEvent,
+    WebhookEventType,
 )
+from hvakr.webhooks import HVAKRWebhookError, construct_webhook_event
 
 __version__ = "0.1.0"
 
@@ -64,8 +67,11 @@ __all__ = [
     # Client classes
     "HVAKRClient",
     "AsyncHVAKRClient",
+    # Webhooks
+    "construct_webhook_event",
     # Exceptions
     "HVAKRClientError",
+    "HVAKRWebhookError",
     # Version
     "__version__",
     # Common schemas
@@ -96,4 +102,13 @@ __all__ = [
     "RevitData",
     # Weather schemas
     "WeatherStationData",
+    # Webhook schemas
+    "KnownWebhookEvent",
+    "OpportunityCreatedEvent",
+    "OpportunityCreatedPayload",
+    "ProjectCreatedEvent",
+    "ProjectCreatedPayload",
+    "UnknownWebhookEvent",
+    "WebhookEvent",
+    "WebhookEventType",
 ]

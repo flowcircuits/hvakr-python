@@ -1,12 +1,12 @@
 """Project schema definitions."""
 
 from enum import Enum
-from typing import Any, Literal
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from hvakr.schemas.common import DisplayUnitSystemId, Point, Rect
-from hvakr.schemas.graph import DuctSize, FlowType, Graph
+from hvakr.schemas.common import Box, DisplayUnitSystemId, Point, Rect, Size
+from hvakr.schemas.graph import DuctSize, FlowType, Graph, RegisterPlacementType
 
 
 # Weather spec enums
@@ -141,6 +141,48 @@ class TerminalUnitOutsideAirMethod(int, Enum):
     SUM_OF_SPACES = 0
     PERCENT = 1
     CUSTOM = 2
+
+
+class PipeMaterialType(str, Enum):
+    """Pipe material type."""
+
+    STEEL = "STEEL"
+    COPPER = "COPPER"
+
+
+class DefaultRegisterType(str, Enum):
+    """Default register sizing category."""
+
+    LARGE = "LARGE"
+    NORMAL = "NORMAL"
+    SMALL = "SMALL"
+
+
+class ReportFileType(str, Enum):
+    """Report output file type."""
+
+    PDF = "PDF"
+    CSV = "CSV"
+
+
+class LengthUnit(str, Enum):
+    """Length unit for sheet scales."""
+
+    IN = "IN"
+    FT = "FT"
+    MM = "MM"
+    M = "M"
+
+
+class SheetType(str, Enum):
+    """Sheet drawing type."""
+
+    ENLARGED_FLOOR_PLAN = "Enlarged Floor Plan"
+    OVERALL_FLOOR_PLAN = "Overall Floor Plan"
+    REFLECTED_CEILING_PLAN = "Reflected Ceiling Plan"
+    FURNITURE_PLAN = "Furniture Plan"
+    EXTERIOR_ELEVATION = "Exterior Elevation"
+    INTERIOR_ELEVATION = "Interior Elevation"
 
 
 # Weather and map specs
@@ -297,7 +339,7 @@ class FittingsConfig(BaseModel):
 class DuctSizingData(BaseModel):
     """Duct sizing data."""
 
-    duct_sizes: dict[str, dict[str, Any]] | None = Field(default=None, alias="ductSizes")
+    duct_sizes: dict[str, DuctSize] | None = Field(default=None, alias="ductSizes")
     duct_sizing_hash: str | None = Field(default=None, alias="ductSizingHash")
 
     model_config = {"populate_by_name": True}
@@ -656,106 +698,326 @@ class ZoneData(BaseModel):
 class BranchTypeData(BaseModel):
     """Branch type data."""
 
-    # Add fields as needed based on schema
-    pass
+    loss_coefficient: float | None = Field(default=None, alias="lossCoefficient")
+    name: str | None = None
+
+    model_config = {"populate_by_name": True}
 
 
 class DeadlineData(BaseModel):
     """Deadline data."""
 
-    # Add fields as needed based on schema
-    pass
+    complete: bool
+    date: float
+    name: str | None = None
+    timestamp: float | None = None
 
 
 class DoorTypeData(BaseModel):
     """Door type data."""
 
-    # Add fields as needed based on schema
-    pass
+    name: str | None = None
+    open_fraction: float | None = Field(default=None, alias="openFraction")
+    seals: bool | None = None
+    surface_absorptance: float | None = Field(default=None, alias="surfaceAbsorptance")
+    timestamp: float | None = None
+    u_value: float | None = Field(default=None, alias="uValue")
+
+    model_config = {"populate_by_name": True}
 
 
 class DuctTypeData(BaseModel):
     """Duct type data."""
 
-    # Add fields as needed based on schema
-    pass
+    color: str | None = None
+    liner_thickness: float | None = Field(default=None, alias="linerThickness")
+    max_height: float | None = Field(default=None, alias="maxHeight")
+    max_pressure_drop_rate: float | None = Field(default=None, alias="maxPressureDropRate")
+    max_velocity: float | None = Field(default=None, alias="maxVelocity")
+    name: str | None = None
+    timestamp: float | None = None
+
+    model_config = {"populate_by_name": True}
 
 
 class PipeTypeData(BaseModel):
     """Pipe type data."""
 
-    # Add fields as needed based on schema
-    pass
+    insulation: float | None = None
+    material: PipeMaterialType | None = None
+    max_pressure_drop_rate: float | None = Field(default=None, alias="maxPressureDropRate")
+    max_velocity: float | None = Field(default=None, alias="maxVelocity")
+    name: str | None = None
+
+    model_config = {"populate_by_name": True}
+
+
+class RegisterSpecConstraints(BaseModel):
+    """Constraints applied to a register specification."""
+
+    max_cfm: float | None = Field(default=None, alias="maxCFM")
+    max_fpm: float | None = Field(default=None, alias="maxFPM")
+    max_nc: float | None = Field(default=None, alias="maxNC")
+    register_model_id: str | None = Field(default=None, alias="registerModelId")
+
+    model_config = {"populate_by_name": True}
 
 
 class RegisterTypeData(BaseModel):
-    """Register type data."""
+    """Register type data.
 
-    # Add fields as needed based on schema
-    pass
+    Extends RegisterSpecificData with default-type metadata.
+    """
+
+    flow_rate: float | None = Field(default=None, alias="flowRate")
+    flow_type: FlowType = Field(alias="flowType")
+    placement_type: RegisterPlacementType = Field(alias="placementType")
+    pressure_loss: float | None = Field(default=None, alias="pressureLoss")
+    size: Size
+    tag: str | None = None
+    throw: float | None = None
+    default_type: DefaultRegisterType | None = Field(default=None, alias="defaultType")
+    name: str | None = None
+    timestamp: float | None = None
+
+    model_config = {"populate_by_name": True}
+
+
+class ReportTemplateOption(BaseModel):
+    """A configurable option on a report template."""
+
+    id: str
+    label: str
+    type: Literal["checkbox", "select"]
+    value: bool | str
+    options: dict[str, str] | None = None
+
+
+class ReportTemplate(BaseModel):
+    """A report template definition."""
+
+    file_type: ReportFileType = Field(alias="fileType")
+    id: str
+    name: str
+    options: dict[str, ReportTemplateOption] | None = None
+
+    model_config = {"populate_by_name": True}
 
 
 class ReportData(BaseModel):
     """Report data."""
 
-    # Add fields as needed based on schema
-    pass
+    access_token: str = Field(alias="accessToken")
+    date: float
+    display_unit_system_id: DisplayUnitSystemId = Field(alias="displayUnitSystemId")
+    file_name: str = Field(alias="fileName")
+    name: str
+    pending: bool
+    template: ReportTemplate
+
+    model_config = {"populate_by_name": True}
 
 
 class RoofTypeData(BaseModel):
     """Roof type data."""
 
-    # Add fields as needed based on schema
-    pass
+    ashrae_roof_type_id: str | None = Field(default=None, alias="ashraeRoofTypeId")
+    color: str | None = None
+    name: str | None = None
+    surface_absorptance: float | None = Field(default=None, alias="surfaceAbsorptance")
+    timestamp: float | None = None
+    u_value: float | None = Field(default=None, alias="uValue")
+    unconditioned_cooling_temp_f: float | None = Field(
+        default=None, alias="unconditionedCoolingTempF"
+    )
+    unconditioned_heating_temp_f: float | None = Field(
+        default=None, alias="unconditionedHeatingTempF"
+    )
+
+    model_config = {"populate_by_name": True}
 
 
 class SheetFileData(BaseModel):
     """Sheet file data."""
 
-    # Add fields as needed based on schema
-    pass
+    page_count: float | None = Field(default=None, alias="pageCount")
+    processing_finish_time: float | None = Field(default=None, alias="processingFinishTime")
+    processing_start_time: float | None = Field(default=None, alias="processingStartTime")
+    sheet_number_box: list[Point] | None = Field(default=None, alias="sheetNumberBox")
+    source_file_name: str = Field(alias="sourceFileName")
+    timestamp: float
+    upload_finish_time: float | None = Field(default=None, alias="uploadFinishTime")
+    upload_start_time: float = Field(alias="uploadStartTime")
+    url: str
+
+    model_config = {"populate_by_name": True}
+
+
+class SheetPlacementData(BaseModel):
+    """Placement of a sheet within a project."""
+
+    crop_box: Box | None = Field(default=None, alias="cropBox")
+    is_locked: bool | None = Field(default=None, alias="isLocked")
+    level: float
+    rotation: float | None = None
+    x: float
+    y: float
+
+    model_config = {"populate_by_name": True}
+
+
+class SheetAnnotation(BaseModel):
+    """Annotation on a sheet."""
+
+    confidence: float | None = None
+    polygon: list[Point]
+    text: str
+    type: str
+
+
+class CustomScaleInfo(BaseModel):
+    """Custom scale information for a sheet."""
+
+    left_scale: float | None = Field(default=None, alias="leftScale")
+    left_unit: LengthUnit | None = Field(default=None, alias="leftUnit")
+    right_scale: float | None = Field(default=None, alias="rightScale")
+    right_unit: LengthUnit | None = Field(default=None, alias="rightUnit")
+
+    model_config = {"populate_by_name": True}
+
+
+class SheetVersionData(BaseModel):
+    """Version data for a sheet."""
+
+    access_token: str = Field(alias="accessToken")
+    image_file_name: str = Field(alias="imageFileName")
+    page_number: float = Field(alias="pageNumber")
+    sheet_file_id: str = Field(alias="sheetFileId")
+    sheet_file_page_id: str = Field(alias="sheetFilePageId")
+    source_file_name: str = Field(alias="sourceFileName")
+
+    model_config = {"populate_by_name": True}
 
 
 class SheetData(BaseModel):
     """Sheet data."""
 
-    # Add fields as needed based on schema
-    pass
+    active_sheet_file_page_id: str | None = Field(default=None, alias="activeSheetFilePageId")
+    placements: dict[str, SheetPlacementData] | None = None
+    sheet_type: SheetType | None = Field(default=None, alias="sheetType")
+
+    model_config = {"populate_by_name": True}
 
 
 class SlabTypeData(BaseModel):
     """Slab type data."""
 
-    # Add fields as needed based on schema
-    pass
+    color: str | None = None
+    f_factor: float | None = Field(default=None, alias="fFactor")
+    name: str | None = None
+    timestamp: float | None = None
+    u_value: float | None = Field(default=None, alias="uValue")
+    unconditioned_cooling_temp_f: float | None = Field(
+        default=None, alias="unconditionedCoolingTempF"
+    )
+    unconditioned_heating_temp_f: float | None = Field(
+        default=None, alias="unconditionedHeatingTempF"
+    )
+
+    model_config = {"populate_by_name": True}
 
 
 class SpaceTypeData(BaseModel):
     """Space type data."""
 
-    # Add fields as needed based on schema
-    pass
+    cooling_temp: float | None = Field(default=None, alias="coolingTemp")
+    equipment_load: float | None = Field(default=None, alias="equipmentLoad")
+    exhaust_ach: float | None = Field(default=None, alias="exhaustAch")
+    exhaust_area_req: float | None = Field(default=None, alias="exhaustAreaReq")
+    ez: float | None = None
+    heating_temp: float | None = Field(default=None, alias="heatingTemp")
+    infiltration_ach_req: float | None = Field(default=None, alias="infiltrationAchReq")
+    infiltration_area_req: float | None = Field(default=None, alias="infiltrationAreaReq")
+    infiltration_lf_req: float | None = Field(default=None, alias="infiltrationLfReq")
+    infiltration_use_separate_winter_reqs: bool | None = Field(
+        default=None, alias="infiltrationUseSeparateWinterReqs"
+    )
+    infiltration_winter_ach_req: float | None = Field(
+        default=None, alias="infiltrationWinterAchReq"
+    )
+    infiltration_winter_area_req: float | None = Field(
+        default=None, alias="infiltrationWinterAreaReq"
+    )
+    infiltration_winter_lf_req: float | None = Field(
+        default=None, alias="infiltrationWinterLfReq"
+    )
+    lighting_ceiling_load_percent: float | None = Field(
+        default=None, alias="lightingCeilingLoadPercent"
+    )
+    lighting_load: float | None = Field(default=None, alias="lightingLoad")
+    name: str | None = None
+    name_synonyms: list[str] | None = Field(default=None, alias="nameSynonyms")
+    nc: float | None = None
+    outside_ach: float | None = Field(default=None, alias="outsideAch")
+    people_density: float | None = Field(default=None, alias="peopleDensity")
+    people_latent_load: float | None = Field(default=None, alias="peopleLatentLoad")
+    people_sensible_load: float | None = Field(default=None, alias="peopleSensibleLoad")
+    register_spec: dict[FlowType, RegisterSpecConstraints] | None = Field(
+        default=None, alias="registerSpec"
+    )
+    relative_humidity: float | None = Field(default=None, alias="relativeHumidity")
+    supply_area_req: float | None = Field(default=None, alias="supplyAreaReq")
+    supply_req: float | None = Field(default=None, alias="supplyReq")
+    temperature_range: float | None = Field(default=None, alias="temperatureRange")
+    timestamp: float | None = None
+    unit_exhaust_rate: float | None = Field(default=None, alias="unitExhaustRate")
+    usage_schedule: list[float] | None = Field(default=None, alias="usageSchedule")
+    ventilation_area_req: float | None = Field(default=None, alias="ventilationAreaReq")
+    ventilation_people_req: float | None = Field(default=None, alias="ventilationPeopleReq")
 
-
-class VersionSetData(BaseModel):
-    """Version set data."""
-
-    # Add fields as needed based on schema
-    pass
+    model_config = {"populate_by_name": True}
 
 
 class WallTypeData(BaseModel):
     """Wall type data."""
 
-    # Add fields as needed based on schema
-    pass
+    ashrae_wall_type_id: str | None = Field(default=None, alias="ashraeWallTypeId")
+    below_grade_cooling_temp_f: float | None = Field(
+        default=None, alias="belowGradeCoolingTempF"
+    )
+    below_grade_heating_temp_f: float | None = Field(
+        default=None, alias="belowGradeHeatingTempF"
+    )
+    color: str | None = None
+    name: str | None = None
+    surface_absorptance: float | None = Field(default=None, alias="surfaceAbsorptance")
+    timestamp: float | None = None
+    u_value: float | None = Field(default=None, alias="uValue")
+
+    model_config = {"populate_by_name": True}
 
 
 class WindowTypeData(BaseModel):
     """Window type data."""
 
-    # Add fields as needed based on schema
-    pass
+    ashrae_window_type_id: str | None = Field(default=None, alias="ashraeWindowTypeId")
+    infiltration_area_req: float | None = Field(default=None, alias="infiltrationAreaReq")
+    infiltration_lf_req: float | None = Field(default=None, alias="infiltrationLfReq")
+    infiltration_use_separate_winter_reqs: bool | None = Field(
+        default=None, alias="infiltrationUseSeparateWinterReqs"
+    )
+    infiltration_winter_area_req: float | None = Field(
+        default=None, alias="infiltrationWinterAreaReq"
+    )
+    infiltration_winter_lf_req: float | None = Field(
+        default=None, alias="infiltrationWinterLfReq"
+    )
+    name: str | None = None
+    shgc: float | None = None
+    timestamp: float | None = None
+    u_value: float | None = Field(default=None, alias="uValue")
+
+    model_config = {"populate_by_name": True}
 
 
 # Main project data
@@ -835,7 +1097,6 @@ class ProjectSubcollections(BaseModel):
     space_types: dict[str, SpaceTypeData] | None = Field(default=None, alias="spaceTypes")
     spaces: dict[str, SpaceData] | None = None
     systems: dict[str, SystemData] | None = None
-    version_sets: dict[str, VersionSetData] | None = Field(default=None, alias="versionSets")
     wall_types: dict[str, WallTypeData] | None = Field(default=None, alias="wallTypes")
     window_types: dict[str, WindowTypeData] | None = Field(default=None, alias="windowTypes")
     zones: dict[str, ZoneData] | None = None
@@ -932,7 +1193,6 @@ class ExpandedProjectPatch(BaseModel):
     space_types: dict[str, SpaceTypeData] | None = Field(default=None, alias="spaceTypes")
     spaces: dict[str, SpaceData] | None = None
     systems: dict[str, SystemData] | None = None
-    version_sets: dict[str, VersionSetData] | None = Field(default=None, alias="versionSets")
     wall_types: dict[str, WallTypeData] | None = Field(default=None, alias="wallTypes")
     window_types: dict[str, WindowTypeData] | None = Field(default=None, alias="windowTypes")
     zones: dict[str, ZoneData] | None = None

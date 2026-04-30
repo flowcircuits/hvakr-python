@@ -1,7 +1,7 @@
 """Graph schema definitions for HVAC system topology."""
 
 from enum import Enum
-from typing import Annotated, Literal, Union
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field
 
@@ -67,7 +67,7 @@ class RectangleDuctSize(BaseModel):
 
 
 DuctSize = Annotated[
-    Union[CircleDuctSize, RectangleDuctSize],
+    CircleDuctSize | RectangleDuctSize,
     Field(discriminator="duct_size_type"),
 ]
 
@@ -162,13 +162,11 @@ class PortalNodeData(BaseModel):
 
 
 AssociatedNodeData = Annotated[
-    Union[
-        RegisterNodeData,
-        TerminalUnitNodeData,
-        CentralUnitNodeData,
-        FittingNodeData,
-        PortalNodeData,
-    ],
+    RegisterNodeData
+    | TerminalUnitNodeData
+    | CentralUnitNodeData
+    | FittingNodeData
+    | PortalNodeData,
     Field(discriminator="node_type"),
 ]
 
@@ -199,7 +197,7 @@ class LinkAdjacencyData(BaseModel):
 
 
 AssociatedAdjacencyData = Annotated[
-    Union[DuctAdjacencyData, LinkAdjacencyData],
+    DuctAdjacencyData | LinkAdjacencyData,
     Field(discriminator="adjacency_type"),
 ]
 
