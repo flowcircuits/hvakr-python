@@ -28,6 +28,9 @@ class HVAKRClientError(Exception):
         super().__init__(message)
         self.message = message
         self.status_code = status_code
+        # ``status`` matches the public v0.6 API client contract; retain
+        # ``status_code`` for callers upgrading from earlier Python releases.
+        self.status = status_code
         self.metadata = metadata
 
     def __str__(self) -> str:

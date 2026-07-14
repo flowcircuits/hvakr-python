@@ -18,7 +18,8 @@ client = HVAKRClient(access_token="your-access-token")
 
 # List all projects
 projects = client.list_projects()
-print(projects)  # {"ids": ["project-1", "project-2", ...]}
+for project in projects.projects:
+    print(project.id, project.name)
 
 # Get a specific project
 project = client.get_project("project-id")
@@ -69,13 +70,15 @@ HVAKRClient(
 
 ### Project Methods
 
-#### list_projects()
+#### list_projects(limit=None, cursor=None, search=None, status=None, project_type=None)
 
-List all projects accessible to the authenticated user.
+List projects using the v0.6 paginated endpoint. Pass `next_cursor` as `cursor`
+while `has_more` is true.
 
 ```python
-result = client.list_projects()
-# Returns: {"ids": ["project-1", "project-2", ...]}
+page = client.list_projects(limit=50, search="office", project_type="commercial")
+for project in page.projects:
+    print(project.id, project.name)
 ```
 
 #### get_project(project_id, expand=False)
@@ -90,7 +93,7 @@ project = client.get_project("project-id")
 expanded = client.get_project("project-id", expand=True)
 ```
 
-#### create_project(project_data, revit_payload=False)
+#### create_project(project_data, idempotency_key=None)
 
 Create a new project.
 
@@ -101,10 +104,10 @@ result = client.create_project({
     "latitude": 40.7128,
     "longitude": -74.0060,
 })
-# Returns: {"id": "new-project-id"}
+# `equipmentModes` can be omitted; the API seeds cooling_mode and heating_mode.
 ```
 
-#### update_project(project_id, project_data, revit_payload=False)
+#### update_project(project_id, project_data, idempotency_key=None)
 
 Update an existing project.
 
@@ -122,42 +125,44 @@ Delete a project.
 result = client.delete_project("project-id")
 ```
 
-#### get_project_outputs(project_id, output_type)
+#### get_project_calculations(project_id, include=None)
 
-Retrieve calculated outputs for a project.
-
-```python
-# Get heating/cooling loads
-loads = client.get_project_outputs("project-id", "loads")
-
-# Get dry side graph
-graph = client.get_project_outputs("project-id", "dryside_graph")
-
-# Get register schedule
-schedule = client.get_project_outputs("project-id", "register_schedule")
-```
-
-### Weather Station Methods
-
-#### search_weather_stations(latitude, longitude)
-
-Search for weather stations near a geographic location.
+Run the calculator once and retrieve selected sections. Calculation airflows,
+checksums, and equipment results are keyed by the project's equipment mode IDs.
 
 ```python
-result = client.search_weather_stations(40.7128, -74.0060)
-# Returns: {"weatherStationIds": ["station-1", "station-2", ...]}
+calculations = client.get_project_calculations(
+    "project-id", include=["loads", "airflows", "equipment"]
+)
+cooling_airflows = calculations.airflows.project.by_mode["cooling_mode"]
 ```
 
-#### get_weather_station(weather_station_id)
-
-Retrieve detailed data for a specific weather station.
+### Jobs, products, and identity
 
 ```python
-station = client.get_weather_station("station-id")
-print(station.station)        # Station name
-print(station.climate_zone)   # Climate zone
-print(station.elevation)      # Elevation
+# Start a report, auto-group, check, or auto-takeoff job.
+job = client.create_job("project-id", {"type": "check"})
+job = client.get_job("project-id", job.job_id)
+
+# Browse the product catalog and inspect the authenticated account.
+products = client.list_products(search="fan")
+identity = client.me()
 ```
+
+## v0.6 migration notes
+
+This SDK follows the breaking HVAKR v0.6 API:
+
+- Use `system.equipmentConfig` and `zone.equipmentConfig` instead of the legacy
+  central/terminal configuration fields. Components are ordered in `components`
+  and configured per mode in `componentConfigsByMode`.
+- Use `project.equipmentModes` and mode keys such as `cooling_mode` rather than
+  fixed cooling/heating output paths.
+- Replace flat space airflow fields with `designAirflowsByMode`, and place
+  ventilation/infiltration overrides under `airflowRequirementsByLoadCondition`.
+- `get_project_outputs`, weather-station methods, and Revit payload options were
+  removed by the platform. Use `get_project_calculations` and project jobs.
+
 
 ## Error Handling
 
