@@ -3,7 +3,7 @@
 from enum import Enum
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from hvakr.schemas.common import Box, DisplayUnitSystemId, Point, Rect, Size
 from hvakr.schemas.graph import DuctSize, FlowType, Graph, RegisterPlacementType
@@ -650,6 +650,19 @@ class EquipmentComponentConfiguration(BaseModel):
     decoupled: bool | None = None
 
     model_config = {"populate_by_name": True, "extra": "allow"}
+
+    @model_validator(mode="before")
+    @classmethod
+    def resolve_method_for_component_type(cls, data: Any) -> Any:
+        """Use the component type to disambiguate overlapping method values."""
+        if not isinstance(data, dict) or data.get("method") is None:
+            return data
+
+        component_type = data.get("componentType", data.get("component_type"))
+        if component_type == EquipmentComponentType.EQUIPMENT_INLET:
+            data = data.copy()
+            data["method"] = EquipmentInletMethod(data["method"])
+        return data
 
 
 class ComponentConfiguration(BaseModel):

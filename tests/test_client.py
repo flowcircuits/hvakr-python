@@ -4,7 +4,14 @@ import pytest
 from pytest_httpx import HTTPXMock
 
 from hvakr import APIProjectCalculations, AsyncHVAKRClient, HVAKRClient, HVAKRClientError, Project
-from hvakr.schemas import APIJob, EquipmentMode, LoadCondition, SpaceData, TerminalUnitConfiguration
+from hvakr.schemas import (
+    APIJob,
+    EquipmentInletMethod,
+    EquipmentMode,
+    LoadCondition,
+    SpaceData,
+    TerminalUnitConfiguration,
+)
 
 DEFAULT_EQUIPMENT_MODES = {
     "cooling_mode": {
@@ -273,6 +280,21 @@ class TestSchemaValidation:
         assert mode.load_condition is LoadCondition.COOLING
         component = config.component_configs_by_mode["cooling_mode"]["coil"]
         assert component.configuration.target_temperature == 55
+
+    def test_equipment_inlet_custom_method_uses_inlet_enum(self) -> None:
+        config = TerminalUnitConfiguration.model_validate(
+            {
+                "inletData": {
+                    "enabled": True,
+                    "configuration": {
+                        "componentType": "EQUIPMENT_INLET",
+                        "method": "CUSTOM",
+                    },
+                }
+            }
+        )
+
+        assert config.inlet_data.configuration.method is EquipmentInletMethod.CUSTOM
 
     def test_space_uses_per_mode_airflows_and_per_condition_requirements(self) -> None:
         space = SpaceData.model_validate(
