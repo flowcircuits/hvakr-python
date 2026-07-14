@@ -189,8 +189,6 @@ from hvakr import (
     HVAKRClient,
     Project,
     ExpandedProject,
-    WeatherStationData,
-    APIProjectOutputLoads,
 )
 
 client = HVAKRClient(access_token="your-token")
