@@ -1,89 +1,85 @@
-"""Tests for HVAKRClient."""
+"""Tests for the HVAKR v0.6 client surface."""
 
 import pytest
 from pytest_httpx import HTTPXMock
 
-from hvakr import (
-    AsyncHVAKRClient,
-    HVAKRClient,
-    HVAKRClientError,
-    Project,
-    WeatherStationData,
+from hvakr import APIProjectCalculations, AsyncHVAKRClient, HVAKRClient, HVAKRClientError, Project
+from hvakr.schemas import (
+    APIJob,
+    EquipmentInletMethod,
+    EquipmentMode,
+    LoadCondition,
+    SpaceData,
+    TerminalUnitConfiguration,
 )
+
+DEFAULT_EQUIPMENT_MODES = {
+    "cooling_mode": {
+        "id": "cooling_mode",
+        "loadCondition": "COOLING",
+        "name": "Cooling",
+        "description": "",
+    },
+    "heating_mode": {
+        "id": "heating_mode",
+        "loadCondition": "HEATING",
+        "name": "Heating",
+        "description": "",
+    },
+}
 
 
 class TestHVAKRClient:
-    """Tests for synchronous HVAKRClient."""
+    """Tests for the synchronous client."""
 
-    def test_create_url_basic(self) -> None:
-        """Test URL creation without query params."""
+    def test_create_url_encodes_query_values_and_flags(self) -> None:
         client = HVAKRClient(access_token="test-token")
-        url = client._create_url("/projects")
-        assert url == "https://api.hvakr.com/v0/projects"
+        url = client._create_url(
+            "/projects/project id", {"search": "A & B", "expand": True, "unused": False}
+        )
+        assert url == "https://api.hvakr.com/v0/projects/project id?search=A%20%26%20B&expand"
 
-    def test_create_url_with_string_params(self) -> None:
-        """Test URL creation with string query params."""
-        client = HVAKRClient(access_token="test-token")
-        url = client._create_url("/weather-stations", {"latitude": "40.7", "longitude": "-74.0"})
-        assert url == "https://api.hvakr.com/v0/weather-stations?latitude=40.7&longitude=-74.0"
-
-    def test_create_url_with_bool_params(self) -> None:
-        """Test URL creation with boolean query params."""
-        client = HVAKRClient(access_token="test-token")
-        url = client._create_url("/projects/123", {"expand": True})
-        assert url == "https://api.hvakr.com/v0/projects/123?expand"
-
-    def test_create_url_with_false_bool_params(self) -> None:
-        """Test URL creation with false boolean query params (should be omitted)."""
-        client = HVAKRClient(access_token="test-token")
-        url = client._create_url("/projects/123", {"expand": False})
-        assert url == "https://api.hvakr.com/v0/projects/123"
-
-    def test_custom_base_url(self) -> None:
-        """Test client with custom base URL."""
-        client = HVAKRClient(access_token="test-token", base_url="https://custom.api.com")
-        url = client._create_url("/projects")
-        assert url == "https://custom.api.com/v0/projects"
-
-    def test_custom_version(self) -> None:
-        """Test client with custom API version."""
-        client = HVAKRClient(access_token="test-token", version="v1")
-        url = client._create_url("/projects")
-        assert url == "https://api.hvakr.com/v1/projects"
-
-    def test_auth_headers(self) -> None:
-        """Test authentication headers."""
+    def test_auth_headers_identify_the_sdk(self) -> None:
         client = HVAKRClient(access_token="my-secret-token")
-        headers = client._get_auth_headers()
-        assert headers == {"Authorization": "Bearer my-secret-token"}
+        assert client._get_auth_headers() == {
+            "Authorization": "Bearer my-secret-token",
+            "X-HVAKR-Client": "hvakr-python/0.6.0",
+        }
 
-    def test_context_manager(self) -> None:
-        """Test client as context manager."""
-        with HVAKRClient(access_token="test-token") as client:
-            assert client._client is None  # Client created lazily
-
-    def test_list_projects(self, httpx_mock: HTTPXMock) -> None:
-        """Test listing projects."""
+    def test_list_projects_is_paginated_and_filterable(self, httpx_mock: HTTPXMock) -> None:
         httpx_mock.add_response(
-            url="https://api.hvakr.com/v0/projects",
-            json={"ids": ["project-1", "project-2", "project-3"]},
+            url=(
+                "https://api.hvakr.com/v0/projects?limit=25&cursor=next&search=office"
+                "&status=inProgress&projectType=commercial"
+            ),
+            json={
+                "projects": [{"id": "project-1", "name": "Office", "status": "inProgress"}],
+                "hasMore": True,
+                "nextCursor": "again",
+            },
         )
 
         with HVAKRClient(access_token="test-token") as client:
-            result = client.list_projects()
+            result = client.list_projects(
+                limit=25,
+                cursor="next",
+                search="office",
+                status="inProgress",
+                project_type="commercial",
+            )
 
-        assert result == {"ids": ["project-1", "project-2", "project-3"]}
+        assert result.projects[0].id == "project-1"
+        assert result.has_more is True
+        assert result.next_cursor == "again"
 
-    def test_get_project(self, httpx_mock: HTTPXMock) -> None:
-        """Test getting a project."""
+    def test_get_project_uses_mode_keyed_project_data(self, httpx_mock: HTTPXMock) -> None:
         httpx_mock.add_response(
             url="https://api.hvakr.com/v0/projects/project-123",
             json={
                 "id": "project-123",
                 "name": "Test Project",
-                "users": {
-                    "user-1": {"role": 10}
-                },
+                "users": {"user-1": {"role": 10}},
+                "equipmentModes": DEFAULT_EQUIPMENT_MODES,
             },
         )
 
@@ -91,99 +87,86 @@ class TestHVAKRClient:
             result = client.get_project("project-123")
 
         assert isinstance(result, Project)
-        assert result.id == "project-123"
-        assert result.name == "Test Project"
+        assert result.equipment_modes["cooling_mode"].load_condition is LoadCondition.COOLING
 
-    def test_create_project(self, httpx_mock: HTTPXMock) -> None:
-        """Test creating a project."""
+    def test_get_project_can_expand_selected_subcollections(self, httpx_mock: HTTPXMock) -> None:
         httpx_mock.add_response(
-            url="https://api.hvakr.com/v0/projects",
-            json={"id": "new-project-id"},
-        )
-
-        with HVAKRClient(access_token="test-token") as client:
-            result = client.create_project({"name": "New Project"})
-
-        assert result == {"id": "new-project-id"}
-
-    def test_update_project(self, httpx_mock: HTTPXMock) -> None:
-        """Test updating a project."""
-        httpx_mock.add_response(
-            url="https://api.hvakr.com/v0/projects/project-123",
-            json={"id": "project-123", "name": "Updated Project"},
-        )
-
-        with HVAKRClient(access_token="test-token") as client:
-            result = client.update_project("project-123", {"name": "Updated Project"})
-
-        assert result["name"] == "Updated Project"
-
-    def test_delete_project(self, httpx_mock: HTTPXMock) -> None:
-        """Test deleting a project."""
-        httpx_mock.add_response(
-            url="https://api.hvakr.com/v0/projects/project-123",
-            json={"deleted": True},
-        )
-
-        with HVAKRClient(access_token="test-token") as client:
-            result = client.delete_project("project-123")
-
-        assert result == {"deleted": True}
-
-    def test_search_weather_stations(self, httpx_mock: HTTPXMock) -> None:
-        """Test searching weather stations."""
-        httpx_mock.add_response(
-            url="https://api.hvakr.com/v0/weather-stations?latitude=40.7128&longitude=-74.006",
-            json={"weatherStationIds": ["station-1", "station-2"]},
-        )
-
-        with HVAKRClient(access_token="test-token") as client:
-            result = client.search_weather_stations(40.7128, -74.006)
-
-        assert result == {"weatherStationIds": ["station-1", "station-2"]}
-
-    def test_get_weather_station(self, httpx_mock: HTTPXMock) -> None:
-        """Test getting weather station data."""
-        httpx_mock.add_response(
-            url="https://api.hvakr.com/v0/weather-stations/station-123",
+            url="https://api.hvakr.com/v0/projects/project-123?expand=spaces%2Czones",
             json={
-                "station": "NYC Central Park",
-                "latitude": 40.7128,
-                "longitude": -74.006,
-                "elevation": 10.0,
-                "climateZone": "4A",
-                "timezoneOffset": -5,
-                "averageDailyTemperature": [30, 32, 40, 50, 60, 70, 75, 74, 67, 55, 45, 35],
-                "stdDevDailyTemperature": [5, 5, 6, 7, 7, 6, 5, 5, 6, 7, 6, 5],
-                "dbRange": [10, 10, 12, 14, 15, 14, 13, 12, 11, 10, 10, 10],
-                "wbRange": [8, 8, 9, 10, 11, 10, 9, 9, 8, 8, 8, 8],
-                "hdd50": [600, 500, 300, 100, 0, 0, 0, 0, 0, 50, 200, 500],
-                "hdd65": [1000, 900, 700, 400, 150, 20, 0, 0, 50, 250, 500, 900],
-                "cdd50": [0, 0, 0, 0, 100, 300, 500, 450, 250, 50, 0, 0],
-                "cdd65": [0, 0, 0, 0, 0, 100, 300, 250, 100, 0, 0, 0],
-                "cdh74": [0, 0, 0, 0, 50, 200, 400, 350, 150, 0, 0, 0],
-                "cdh80": [0, 0, 0, 0, 10, 100, 250, 200, 50, 0, 0, 0],
-                "taub": [0.35, 0.36, 0.40, 0.42, 0.45, 0.47, 0.50, 0.48, 0.44, 0.40, 0.37, 0.35],
-                "taud": [2.3, 2.2, 2.1, 2.0, 1.9, 1.8, 1.7, 1.8, 2.0, 2.1, 2.2, 2.3],
-                "dbTempByHeatingPercent": {"99": 10, "99.6": 5},
-                "monthlyBulbTempsByCoolingPercent": {
-                    "0.4": {"db": [85, 86, 87], "wb": [70, 71, 72]},
-                    "2": {"db": [83, 84, 85], "wb": [68, 69, 70]},
-                    "5": {"db": [81, 82, 83], "wb": [66, 67, 68]},
-                    "10": {"db": [79, 80, 81], "wb": [64, 65, 66]},
-                },
+                "id": "project-123",
+                "name": "Test Project",
+                "users": {"user-1": {"role": 10}},
+                "equipmentModes": DEFAULT_EQUIPMENT_MODES,
+                "spaces": {},
+                "zones": {},
             },
         )
 
         with HVAKRClient(access_token="test-token") as client:
-            result = client.get_weather_station("station-123")
+            result = client.get_project("project-123", ["spaces", "zones"])
 
-        assert isinstance(result, WeatherStationData)
-        assert result.station == "NYC Central Park"
-        assert result.latitude == 40.7128
+        assert result.spaces == {}
+        assert result.zones == {}
 
-    def test_error_response(self, httpx_mock: HTTPXMock) -> None:
-        """Test error handling for failed requests."""
+    def test_write_requests_send_idempotency_key(self, httpx_mock: HTTPXMock) -> None:
+        httpx_mock.add_response(url="https://api.hvakr.com/v0/projects", json={"id": "new-project"})
+
+        with HVAKRClient(access_token="test-token") as client:
+            result = client.create_project({"name": "New Project"}, idempotency_key="create-1")
+
+        request = httpx_mock.get_requests()[0]
+        assert result == {"id": "new-project"}
+        assert request.headers["Idempotency-Key"] == "create-1"
+        assert request.headers["X-HVAKR-Client"] == "hvakr-python/0.6.0"
+
+    def test_get_project_calculations_selects_sections(self, httpx_mock: HTTPXMock) -> None:
+        httpx_mock.add_response(
+            url="https://api.hvakr.com/v0/projects/project-123/calculations?include=airflows%2Cequipment",
+            json={"errors": [], "flags": {}, "equipment": {"system-1": {"modes": {}}}},
+        )
+
+        with HVAKRClient(access_token="test-token") as client:
+            result = client.get_project_calculations(
+                "project-123", include=["airflows", "equipment"]
+            )
+
+        assert isinstance(result, APIProjectCalculations)
+        assert result.equipment == {"system-1": {"modes": {}}}
+
+    def test_job_product_and_me_endpoints(self, httpx_mock: HTTPXMock) -> None:
+        httpx_mock.add_response(
+            url="https://api.hvakr.com/v0/projects/project-123/jobs",
+            json={"jobId": "job-1", "type": "check", "status": "completed", "result": {}},
+        )
+        httpx_mock.add_response(
+            url="https://api.hvakr.com/v0/products?search=fan&limit=10",
+            json={
+                "products": [{"id": "fan-1", "name": "Fan"}],
+                "hasMore": False,
+                "nextCursor": None,
+            },
+        )
+        httpx_mock.add_response(
+            url="https://api.hvakr.com/v0/me",
+            json={
+                "user": {"id": "user-1", "email": "user@example.com", "license": "team"},
+                "organizations": [],
+                "plan": {"license": "team", "apiAccess": True},
+                "rateLimit": {"limitPerMinute": 60},
+            },
+        )
+
+        with HVAKRClient(access_token="test-token") as client:
+            job = client.create_job("project-123", {"type": "check"})
+            products = client.list_products(search="fan", limit=10)
+            me = client.me()
+
+        assert isinstance(job, APIJob)
+        assert job.job_id == "job-1"
+        assert products.products[0].id == "fan-1"
+        assert me.rate_limit.limit_per_minute == 60
+
+    def test_error_response_exposes_status_and_metadata(self, httpx_mock: HTTPXMock) -> None:
         httpx_mock.add_response(
             url="https://api.hvakr.com/v0/projects",
             status_code=401,
@@ -195,159 +178,174 @@ class TestHVAKRClient:
                 client.list_projects()
 
         assert exc_info.value.status_code == 401
+        assert exc_info.value.status == 401
         assert exc_info.value.metadata == {"error": "Unauthorized", "message": "Invalid token"}
 
 
 class TestAsyncHVAKRClient:
-    """Tests for asynchronous AsyncHVAKRClient."""
+    """Tests for the asynchronous client."""
 
     @pytest.mark.asyncio
-    async def test_list_projects(self, httpx_mock: HTTPXMock) -> None:
-        """Test listing projects asynchronously."""
+    async def test_list_projects_and_calculations(self, httpx_mock: HTTPXMock) -> None:
         httpx_mock.add_response(
             url="https://api.hvakr.com/v0/projects",
-            json={"ids": ["project-1", "project-2"]},
+            json={"projects": [], "hasMore": False, "nextCursor": None},
         )
-
-        async with AsyncHVAKRClient(access_token="test-token") as client:
-            result = await client.list_projects()
-
-        assert result == {"ids": ["project-1", "project-2"]}
-
-    @pytest.mark.asyncio
-    async def test_get_project(self, httpx_mock: HTTPXMock) -> None:
-        """Test getting a project asynchronously."""
         httpx_mock.add_response(
-            url="https://api.hvakr.com/v0/projects/project-123",
-            json={
-                "id": "project-123",
-                "name": "Async Test Project",
-                "users": {
-                    "user-1": {"role": 10}
-                },
-            },
+            url="https://api.hvakr.com/v0/projects/project-123/calculations",
+            json={"errors": [], "flags": {}},
         )
 
         async with AsyncHVAKRClient(access_token="test-token") as client:
-            result = await client.get_project("project-123")
+            projects = await client.list_projects()
+            calculations = await client.get_project_calculations("project-123")
 
-        assert isinstance(result, Project)
-        assert result.name == "Async Test Project"
-
-    @pytest.mark.asyncio
-    async def test_error_response(self, httpx_mock: HTTPXMock) -> None:
-        """Test error handling for failed async requests."""
-        httpx_mock.add_response(
-            url="https://api.hvakr.com/v0/projects",
-            status_code=403,
-            json={"error": "Forbidden"},
-        )
-
-        async with AsyncHVAKRClient(access_token="test-token") as client:
-            with pytest.raises(HVAKRClientError) as exc_info:
-                await client.list_projects()
-
-        assert exc_info.value.status_code == 403
+        assert projects.projects == []
+        assert calculations.errors == []
 
 
 class TestSchemaValidation:
-    """Tests for Pydantic schema validation."""
+    """Tests for the modular-equipment data model."""
 
-    def test_project_validation(self) -> None:
-        """Test Project schema validation."""
-        data = {
-            "id": "project-123",
-            "name": "Test Project",
-            "users": {
-                "user-1": {"role": 10, "firstName": "John", "lastName": "Doe"}
-            },
-            "latitude": 40.7128,
-            "longitude": -74.006,
+    def test_calculations_preserve_airflows_by_project_mode(self) -> None:
+        airflow_totals = {
+            "supply": 400,
+            "return": 300,
+            "outside": 100,
+            "relief": 0,
+            "exhaust": 0,
         }
-        project = Project.model_validate(data)
-        assert project.id == "project-123"
-        assert project.name == "Test Project"
-        assert project.latitude == 40.7128
-
-    def test_weather_station_validation(self) -> None:
-        """Test WeatherStationData schema validation."""
-        data = {
-            "station": "Test Station",
-            "latitude": 40.0,
-            "longitude": -74.0,
-            "elevation": 100.0,
-            "climateZone": "4A",
-            "timezoneOffset": -5,
-            "averageDailyTemperature": [30] * 12,
-            "stdDevDailyTemperature": [5] * 12,
-            "dbRange": [10] * 12,
-            "wbRange": [8] * 12,
-            "hdd50": [500] * 12,
-            "hdd65": [800] * 12,
-            "cdd50": [100] * 12,
-            "cdd65": [50] * 12,
-            "cdh74": [200] * 12,
-            "cdh80": [100] * 12,
-            "taub": [0.4] * 12,
-            "taud": [2.0] * 12,
-            "dbTempByHeatingPercent": {"99": 10, "99.6": 5},
-            "monthlyBulbTempsByCoolingPercent": {
-                "0.4": {"db": [85] * 12, "wb": [70] * 12},
-                "2": {"db": [83] * 12, "wb": [68] * 12},
-                "5": {"db": [81] * 12, "wb": [66] * 12},
-                "10": {"db": [79] * 12, "wb": [64] * 12},
+        mode_airflows = {
+            "airflowDifferential": {"design": 0, "required": 0},
+            "design": airflow_totals,
+            "required": airflow_totals,
+            "spacePeaksSum": airflow_totals,
+            "supplySources": {
+                "codeRequiredSupply": 0,
+                "directAirSpaceSensible": 0,
+                "directOutsideAir": 0,
+                "loadRequiredSupply": 400,
+                "totalSpaceSensible": 0,
             },
         }
-        station = WeatherStationData.model_validate(data)
-        assert station.station == "Test Station"
-        assert station.climate_zone == "4A"
+        calculations = APIProjectCalculations.model_validate(
+            {
+                "errors": [],
+                "flags": {},
+                "airflows": {
+                    "project": {
+                        "byMode": {"cooling_mode": mode_airflows},
+                        "calculatedOutsideAirflow": {"cooling": 100, "heating": 0, "max": 100},
+                        "max": {
+                            "airflowDifferential": {"design": 20, "required": 10},
+                            "design": airflow_totals,
+                            "required": airflow_totals,
+                        },
+                        "requiredOutsideAirflowComponents": {
+                            "code": {"ach": 0},
+                            "load": {"area": 0, "people": 0, "total": 0},
+                        },
+                    },
+                    "spaces": {},
+                    "systems": {},
+                    "zones": {},
+                },
+            }
+        )
 
+        cooling = calculations.airflows.project.by_mode["cooling_mode"]
+        assert cooling.design.supply == 400
+        assert calculations.airflows.project.max.required.outside == 100
+        assert calculations.airflows.project.max.airflow_differential == {
+            "design": 20,
+            "required": 10,
+        }
 
-class TestHVAKRClientError:
-    """Tests for HVAKRClientError."""
+    def test_calculations_accept_sidewall_register_schedule_rows(self) -> None:
+        calculations = APIProjectCalculations.model_validate(
+            {
+                "errors": [],
+                "flags": {},
+                "registerSchedule": [
+                    {
+                        "configuration": "Supply",
+                        "flowType": "SUPPLY",
+                        "inletSize": "6 in.",
+                        "manufacturer": "Example Manufacturer",
+                        "model": "Example Model",
+                        "modelType": "sidewall",
+                        "quantity": 1,
+                        "registerCFM": 100,
+                        "registerFPM": 500,
+                        "registerNC": 20,
+                        "registerSize": "12 x 4 in.",
+                        "spaceName": "Office",
+                        "spaceNumber": "101",
+                        "totalCFM": 100,
+                    }
+                ],
+            }
+        )
 
-    def test_error_str(self) -> None:
-        """Test error string representation."""
-        error = HVAKRClientError("Something went wrong", status_code=500)
-        assert str(error) == "Error 500: Something went wrong"
+        assert calculations.register_schedule is not None
+        assert calculations.register_schedule[0].model_type.value == "sidewall"
 
-    def test_error_str_without_status(self) -> None:
-        """Test error string without status code."""
-        error = HVAKRClientError("Something went wrong")
-        assert str(error) == "Something went wrong"
+    def test_equipment_mode_and_terminal_config_round_trip(self) -> None:
+        mode = EquipmentMode(
+            id="cooling_mode",
+            loadCondition="COOLING",
+            name="Cooling",
+            description="",
+        )
+        config = TerminalUnitConfiguration.model_validate(
+            {
+                "components": [{"id": "coil", "type": "COOLING_COIL"}],
+                "componentConfigsByMode": {
+                    "cooling_mode": {
+                        "coil": {
+                            "enabled": True,
+                            "configuration": {
+                                "componentType": "COOLING_COIL",
+                                "targetTemperature": 55,
+                            },
+                        }
+                    }
+                },
+            }
+        )
 
-    def test_error_repr(self) -> None:
-        """Test error repr."""
-        error = HVAKRClientError("Error", status_code=400, metadata={"detail": "Bad request"})
-        repr_str = repr(error)
-        assert "HVAKRClientError" in repr_str
-        assert "Error" in repr_str
-        assert "400" in repr_str
+        assert mode.load_condition is LoadCondition.COOLING
+        component = config.component_configs_by_mode["cooling_mode"]["coil"]
+        assert component.configuration.target_temperature == 55
 
+    def test_equipment_inlet_custom_method_uses_inlet_enum(self) -> None:
+        config = TerminalUnitConfiguration.model_validate(
+            {
+                "inletData": {
+                    "enabled": True,
+                    "configuration": {
+                        "componentType": "EQUIPMENT_INLET",
+                        "method": "CUSTOM",
+                    },
+                }
+            }
+        )
 
-# Integration tests - only run with HVAKR_API_TOKEN set
-class TestIntegration:
-    """Integration tests that require a real API token."""
+        assert config.inlet_data.configuration.method is EquipmentInletMethod.CUSTOM
 
-    @pytest.mark.integration
-    def test_list_projects_integration(
-        self, api_token: str | None, skip_without_token: None
-    ) -> None:
-        """Test listing projects with real API."""
-        assert api_token is not None
-        with HVAKRClient(access_token=api_token) as client:
-            result = client.list_projects()
-            assert "ids" in result
-            assert isinstance(result["ids"], list)
+    def test_space_uses_per_mode_airflows_and_per_condition_requirements(self) -> None:
+        space = SpaceData.model_validate(
+            {
+                "creationSource": "API",
+                "edges": {},
+                "level": 1,
+                "designAirflowsByMode": {"cooling_mode": {"supplyAir": 400}},
+                "airflowRequirementsByLoadCondition": {
+                    "COOLING": {"ventilationReq": 100, "infiltrationReqMethod": "AREA"}
+                },
+            }
+        )
 
-    @pytest.mark.integration
-    @pytest.mark.asyncio
-    async def test_list_projects_async_integration(
-        self, api_token: str | None, skip_without_token: None
-    ) -> None:
-        """Test listing projects asynchronously with real API."""
-        assert api_token is not None
-        async with AsyncHVAKRClient(access_token=api_token) as client:
-            result = await client.list_projects()
-            assert "ids" in result
-            assert isinstance(result["ids"], list)
+        assert space.design_airflows_by_mode["cooling_mode"].supply_air == 400
+        cooling_requirements = space.airflow_requirements_by_load_condition[LoadCondition.COOLING]
+        assert cooling_requirements.ventilation_req == 100

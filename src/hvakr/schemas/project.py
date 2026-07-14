@@ -1,9 +1,9 @@
 """Project schema definitions."""
 
 from enum import Enum
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from hvakr.schemas.common import Box, DisplayUnitSystemId, Point, Rect, Size
 from hvakr.schemas.graph import DuctSize, FlowType, Graph, RegisterPlacementType
@@ -76,13 +76,43 @@ class EdgeExposure(str, Enum):
     W = "W"
 
 
-class OutsideAirMethod(int, Enum):
+class OutsideAirMethod(str, Enum):
     """Method for calculating outside air."""
 
-    SUM_OF_SPACES = 0
-    PERCENT = 1
-    CUSTOM = 2
-    MULTI_ZONE = 3
+    SUM_OF_SPACES = "SUM_OF_SPACES"
+    PERCENT = "PERCENT"
+    CUSTOM = "CUSTOM"
+    MULTI_ZONE = "MULTI_ZONE"
+
+
+class LoadCondition(str, Enum):
+    """The design condition represented by an equipment mode."""
+
+    COOLING = "COOLING"
+    HEATING = "HEATING"
+
+
+class EquipmentComponentType(str, Enum):
+    """Component types supported by a modular equipment configuration."""
+
+    OUTSIDE_AIR_INTAKE = "OUTSIDE_AIR_INTAKE"
+    ENERGY_RECOVERY_UNIT = "ENERGY_RECOVERY_UNIT"
+    RETURN_AIR_INTAKE = "RETURN_AIR_INTAKE"
+    COOLING_COIL = "COOLING_COIL"
+    HEATING_COIL = "HEATING_COIL"
+    EQUIPMENT_INEFFICIENCY = "EQUIPMENT_INEFFICIENCY"
+    HUMIDIFIER = "HUMIDIFIER"
+    DEHUMIDIFIER = "DEHUMIDIFIER"
+    EQUIPMENT_INLET = "EQUIPMENT_INLET"
+    EQUIPMENT_OUTLET = "EQUIPMENT_OUTLET"
+
+
+class EquipmentInletMethod(str, Enum):
+    """Methods for configuring a terminal unit's upstream inlet airflow."""
+
+    SUM_OF_SPACES_OA = "SUM_OF_SPACES_OA"
+    PERCENT_SUPPLY = "PERCENT_SUPPLY"
+    CUSTOM = "CUSTOM"
 
 
 class CoolingCoilType(int, Enum):
@@ -163,6 +193,8 @@ class ReportFileType(str, Enum):
 
     PDF = "PDF"
     CSV = "CSV"
+    DOCX = "DOCX"
+    ZIP = "ZIP"
 
 
 class LengthUnit(str, Enum):
@@ -287,6 +319,68 @@ class ProjectUserData(BaseModel):
     role: ProjectUserRole
 
     model_config = {"populate_by_name": True}
+
+
+class EquipmentMode(BaseModel):
+    """A project-wide operating mode used by all equipment configurations."""
+
+    id: str
+    load_condition: LoadCondition = Field(alias="loadCondition")
+    name: str
+    description: str
+
+    model_config = {"populate_by_name": True}
+
+
+class UpstreamEquipmentLinkEndpoint(BaseModel):
+    """The outlet selected on an upstream equipment item."""
+
+    id: str
+    outlet_id: str = Field(alias="outletId")
+
+    model_config = {"populate_by_name": True}
+
+
+class EquipmentLinkData(BaseModel):
+    """Connects one equipment outlet to another equipment inlet."""
+
+    upstream_equipment: UpstreamEquipmentLinkEndpoint = Field(alias="upstreamEquipment")
+    downstream_equipment: "DownstreamEquipmentLinkEndpoint" = Field(alias="downstreamEquipment")
+
+    model_config = {"populate_by_name": True}
+
+
+class DownstreamEquipmentLinkEndpoint(BaseModel):
+    """The inlet selected on a downstream equipment item."""
+
+    id: str
+    inlet_id: str = Field(alias="inletId")
+
+    model_config = {"populate_by_name": True}
+
+
+class EquipmentLink(EquipmentLinkData):
+    """A persisted equipment link."""
+
+    id: str
+
+
+DEFAULT_COOLING_MODE_ID = "cooling_mode"
+DEFAULT_HEATING_MODE_ID = "heating_mode"
+DEFAULT_EQUIPMENT_MODES: dict[str, EquipmentMode] = {
+    DEFAULT_COOLING_MODE_ID: EquipmentMode(
+        id=DEFAULT_COOLING_MODE_ID,
+        loadCondition=LoadCondition.COOLING,
+        name="Cooling",
+        description="",
+    ),
+    DEFAULT_HEATING_MODE_ID: EquipmentMode(
+        id=DEFAULT_HEATING_MODE_ID,
+        loadCondition=LoadCondition.HEATING,
+        name="Heating",
+        description="",
+    ),
+}
 
 
 # Fittings configuration
@@ -454,41 +548,21 @@ class Edge(BaseModel):
 class SpaceData(BaseModel):
     """Space data."""
 
-    air_transfer_in: float | None = Field(default=None, alias="airTransferIn")
-    air_transfer_out: float | None = Field(default=None, alias="airTransferOut")
+    design_airflows_by_mode: dict[str, "SpaceDesignAirflows"] | None = Field(
+        default=None, alias="designAirflowsByMode"
+    )
+    airflow_requirements_by_load_condition: (
+        dict[LoadCondition, "SpaceAirflowRequirements"] | None
+    ) = Field(default=None, alias="airflowRequirementsByLoadCondition")
     apply_roof_load_to_ceiling: bool | None = Field(default=None, alias="applyRoofLoadToCeiling")
     ceiling_height: float | None = Field(default=None, alias="ceilingHeight")
-    custom_exhaust: float | None = Field(default=None, alias="customExhaust")
-    custom_outside_airflow: float | None = Field(default=None, alias="customOutsideAirflow")
-    custom_return: float | None = Field(default=None, alias="customReturn")
-    custom_supply: float | None = Field(default=None, alias="customSupply")
-    description: str | None = None
+    creation_source: Literal[
+        "API", "API_REVIT", "AUTO", "LEGACY", "MERGE", "PASTE", "POLYGON", "RECTANGLE", "SPLIT"
+    ] = Field(alias="creationSource")
     edges: dict[str, Edge]
     exhaust_units: float | None = Field(default=None, alias="exhaustUnits")
-    infiltration_ach_req: float | None = Field(default=None, alias="infiltrationAchReq")
-    infiltration_area_req: float | None = Field(default=None, alias="infiltrationAreaReq")
-    infiltration_flow_rate_req: float | None = Field(default=None, alias="infiltrationFlowRateReq")
-    infiltration_lf_req: float | None = Field(default=None, alias="infiltrationLfReq")
-    infiltration_req_method: InfiltrationRequirementMethod | None = Field(
-        default=None, alias="infiltrationReqMethod"
-    )
     infiltration_use_separate_winter_reqs: bool | None = Field(
         default=None, alias="infiltrationUseSeparateWinterReqs"
-    )
-    infiltration_winter_ach_req: float | None = Field(
-        default=None, alias="infiltrationWinterAchReq"
-    )
-    infiltration_winter_area_req: float | None = Field(
-        default=None, alias="infiltrationWinterAreaReq"
-    )
-    infiltration_winter_flow_rate_req: float | None = Field(
-        default=None, alias="infiltrationWinterFlowRateReq"
-    )
-    infiltration_winter_lf_req: float | None = Field(
-        default=None, alias="infiltrationWinterLfReq"
-    )
-    infiltration_winter_req_method: InfiltrationRequirementMethod | None = Field(
-        default=None, alias="infiltrationWinterReqMethod"
     )
     level: int
     misc_heating_load: float | None = Field(default=None, alias="miscHeatingLoad")
@@ -497,14 +571,19 @@ class SpaceData(BaseModel):
     name: str | None = None
     number: str | None = None
     occupancy: float | None = None
+    processed: bool | None = None
     revit_id: str | None = Field(default=None, alias="revitId")
-    roof_direction: EdgeExposure | None = Field(default=None, alias="roofDirection")
+    roof_azimuth: float | None = Field(default=None, alias="roofAzimuth")
     roof_pitch: float | None = Field(default=None, alias="roofPitch")
     roof_type_id: str | None = Field(default=None, alias="roofTypeId")
     skylights: dict[str, SkylightData] | None = None
     slab_height: float | None = Field(default=None, alias="slabHeight")
     slab_type_id: str | None = Field(default=None, alias="slabTypeId")
     space_type_id: str | None = Field(default=None, alias="spaceTypeId")
+    space_name_and_number_input_hash: str | None = Field(
+        default=None, alias="spaceNameAndNumberInputHash"
+    )
+    suggested: bool | None = None
     suggested_space_name: str | None = Field(default=None, alias="suggestedSpaceName")
     suggested_space_number: str | None = Field(default=None, alias="suggestedSpaceNumber")
     zone_id: str | None = Field(default=None, alias="zoneId")
@@ -512,53 +591,106 @@ class SpaceData(BaseModel):
     model_config = {"populate_by_name": True}
 
 
-# System configuration
-class SupplyAirData(BaseModel):
-    """Supply air data."""
+# Modular equipment configuration
+class SpaceDesignAirflows(BaseModel):
+    """Per-mode design airflow overrides for a space."""
 
-    cooling_temperature: float | None = Field(default=None, alias="coolingTemperature")
-    custom_supply_in: float | None = Field(default=None, alias="customSupplyIn")
-    duct_heat_gain: float | None = Field(default=None, alias="ductHeatGain")
-    duct_leakage_percent: float | None = Field(default=None, alias="ductLeakagePercent")
-    heating_temperature: float | None = Field(default=None, alias="heatingTemperature")
-
-    model_config = {"populate_by_name": True}
-
-
-class CoolingCoilData(BaseModel):
-    """Cooling coil data."""
-
-    chilled_water_delta_t: float | None = Field(default=None, alias="chilledWaterDeltaT")
-    type: CoolingCoilType | None = None
+    air_transfer_in: float | None = Field(default=None, alias="airTransferIn")
+    air_transfer_out: float | None = Field(default=None, alias="airTransferOut")
+    exhaust_air: float | None = Field(default=None, alias="exhaustAir")
+    outside_air: float | None = Field(default=None, alias="outsideAir")
+    return_air: float | None = Field(default=None, alias="returnAir")
+    supply_air: float | None = Field(default=None, alias="supplyAir")
 
     model_config = {"populate_by_name": True}
 
 
-class HeatingCoilData(BaseModel):
-    """Heating coil data."""
+class SpaceAirflowRequirements(BaseModel):
+    """Per-load-condition ventilation and infiltration overrides for a space."""
 
-    heating_water_delta_t: float | None = Field(default=None, alias="heatingWaterDeltaT")
-    type: HeatingCoilType | None = None
-
-    model_config = {"populate_by_name": True}
-
-
-class ReturnAirData(BaseModel):
-    """Return air data."""
-
-    duct_heat_gain: float | None = Field(default=None, alias="ductHeatGain")
-    duct_leakage_percent: float | None = Field(default=None, alias="ductLeakagePercent")
+    infiltration_ach_req: float | None = Field(default=None, alias="infiltrationAchReq")
+    infiltration_area_req: float | None = Field(default=None, alias="infiltrationAreaReq")
+    infiltration_flow_rate_req: float | None = Field(default=None, alias="infiltrationFlowRateReq")
+    infiltration_lf_req: float | None = Field(default=None, alias="infiltrationLfReq")
+    infiltration_req_method: InfiltrationRequirementMethod | None = Field(
+        default=None, alias="infiltrationReqMethod"
+    )
+    ventilation_req: float | None = Field(default=None, alias="ventilationReq")
 
     model_config = {"populate_by_name": True}
 
 
-class OutsideAirData(BaseModel):
-    """Outside air data."""
+class EquipmentComponent(BaseModel):
+    """A component in the ordered equipment pipeline."""
 
-    custom: float | None = None
-    method: OutsideAirMethod | None = None
+    id: str
+    type: EquipmentComponentType
+
+
+class EquipmentComponentConfiguration(BaseModel):
+    """Configuration for one component in one operating mode.
+
+    The component type determines which optional fields apply. Keeping the
+    shared wire fields together mirrors the API's component registry while
+    retaining an extensible model for newly introduced components.
+    """
+
+    component_type: EquipmentComponentType = Field(alias="componentType")
+    method: OutsideAirMethod | EquipmentInletMethod | None = None
     percentage: float | None = None
-    previous_method: OutsideAirMethod | None = Field(default=None, alias="previousMethod")
+    flow_rate: float | None = Field(default=None, alias="flowRate")
+    duct_heat_gain: float | None = Field(default=None, alias="ductHeatGain")
+    duct_leakage_percent: float | None = Field(default=None, alias="ductLeakagePercent")
+    erv_wheel_effectiveness: float | None = Field(default=None, alias="ervWheelEffectiveness")
+    relief_enabled: bool | None = Field(default=None, alias="reliefEnabled")
+    target_temperature: float | None = Field(default=None, alias="targetTemperature")
+    type: int | None = None
+    water_delta_t: float | None = Field(default=None, alias="waterDeltaT")
+    sensible_heat_gain: dict[str, Any] | None = Field(default=None, alias="sensibleHeatGain")
+    decoupled: bool | None = None
+
+    model_config = {"populate_by_name": True, "extra": "allow"}
+
+    @model_validator(mode="before")
+    @classmethod
+    def resolve_method_for_component_type(cls, data: Any) -> Any:
+        """Use the component type to disambiguate overlapping method values."""
+        if not isinstance(data, dict) or data.get("method") is None:
+            return data
+
+        component_type = data.get("componentType", data.get("component_type"))
+        if component_type == EquipmentComponentType.EQUIPMENT_INLET:
+            data = data.copy()
+            data["method"] = EquipmentInletMethod(data["method"])
+        return data
+
+
+class ComponentConfiguration(BaseModel):
+    """Enabled state and configuration of a component for a single mode."""
+
+    enabled: bool
+    configuration: EquipmentComponentConfiguration
+
+
+class EquipmentInletData(BaseModel):
+    """Terminal-unit inlet configuration shared by all modes."""
+
+    enabled: bool
+    configuration: EquipmentComponentConfiguration
+
+
+class EquipmentData(BaseModel):
+    """Shared modular equipment configuration for central and terminal units."""
+
+    components: list[EquipmentComponent] | None = None
+    component_configs_by_mode: dict[str, dict[str, ComponentConfiguration]] | None = Field(
+        default=None, alias="componentConfigsByMode"
+    )
+    duct_heat_gain: float | None = Field(default=None, alias="ductHeatGain")
+    duct_leakage_percent: float | None = Field(default=None, alias="ductLeakagePercent")
+    misc_inefficiencies: float | None = Field(default=None, alias="miscInefficiencies")
+    pressure_loss: float | None = Field(default=None, alias="pressureLoss")
+    inlet_data: EquipmentInletData | None = Field(default=None, alias="inletData")
 
     model_config = {"populate_by_name": True}
 
@@ -578,52 +710,52 @@ class CentralUnitDimensionData(BaseModel):
     width: float | None = None
 
 
-class CentralUnitConfiguration(BaseModel):
-    """Central unit configuration."""
+class EnergySchedule(BaseModel):
+    """Operating schedule used for central-unit energy calculations."""
 
-    cooling_coil: bool | None = Field(default=None, alias="coolingCoil")
-    cooling_coil_data: CoolingCoilData | None = Field(default=None, alias="coolingCoilData")
-    custom_relief_air: float | None = Field(default=None, alias="customReliefAir")
-    dimension_data: CentralUnitDimensionData | None = Field(default=None, alias="dimensionData")
-    diversity_data: DiversityData | None = Field(default=None, alias="diversityData")
-    erv_wheel: bool | None = Field(default=None, alias="ervWheel")
-    erv_wheel_effectiveness: float | None = Field(default=None, alias="ervWheelEffectiveness")
-    fan_motor_heat_gain: float | None = Field(default=None, alias="fanMotorHeatGain")
-    heating_coil: bool | None = Field(default=None, alias="heatingCoil")
-    heating_coil_data: HeatingCoilData | None = Field(default=None, alias="heatingCoilData")
-    misc_inefficiencies: float | None = Field(default=None, alias="miscInefficiencies")
-    outside_air: bool | None = Field(default=None, alias="outsideAir")
-    outside_air_data: OutsideAirData | None = Field(default=None, alias="outsideAirData")
-    pressure_loss: float | None = Field(default=None, alias="pressureLoss")
-    return_air: bool | None = Field(default=None, alias="returnAir")
-    return_air_data: ReturnAirData | None = Field(default=None, alias="returnAirData")
-    supply_air_data: SupplyAirData | None = Field(default=None, alias="supplyAirData")
+    occupied_hours: dict[str, Any] | None = Field(default=None, alias="occupiedHours")
+    warmup_hours: float | None = Field(default=None, alias="warmupHours")
+    warmup_multiplier: float | None = Field(default=None, alias="warmupMultiplier")
+
+    model_config = {"populate_by_name": True}
+
+
+class EquipmentEfficiency(BaseModel):
+    """Central-unit heating and cooling efficiency inputs."""
+
+    heating_type: Literal["heatPump", "gasFurnace"] | None = Field(
+        default=None, alias="heatingType"
+    )
+    cooling_seer: float | None = Field(default=None, alias="coolingSeer")
+    heating_cop: float | None = Field(default=None, alias="heatingCop")
+    heating_afue: float | None = Field(default=None, alias="heatingAfue")
 
     model_config = {"populate_by_name": True}
 
 
 class EnergyConfiguration(BaseModel):
-    """Energy configuration."""
+    """Energy configuration attached to a central equipment configuration."""
 
-    efficiency: float | None = None
-    energy_type: Literal["electric", "gas"] | None = Field(default=None, alias="energyType")
-    name: str | None = None
-    use_factor: float | None = Field(default=None, alias="useFactor")
+    schedule: EnergySchedule | None = None
+    efficiency: EquipmentEfficiency | None = None
 
-    model_config = {"populate_by_name": True}
+
+class CentralUnitConfiguration(EquipmentData):
+    """Modular central-unit equipment configuration."""
+
+    dimension_data: CentralUnitDimensionData | None = Field(default=None, alias="dimensionData")
+    energy_configuration: EnergyConfiguration | None = Field(
+        default=None, alias="energyConfiguration"
+    )
 
 
 class SystemData(BaseModel):
     """System data."""
 
-    central_unit_configuration: CentralUnitConfiguration | None = Field(
-        default=None, alias="centralUnitConfiguration"
-    )
+    equipment_config: CentralUnitConfiguration | None = Field(default=None, alias="equipmentConfig")
     color: str | None = None
     configured: bool | None = None
-    energy_configurations: dict[str, EnergyConfiguration] | None = Field(
-        default=None, alias="energyConfigurations"
-    )
+    diversity_data: DiversityData | None = Field(default=None, alias="diversityData")
     name: str | None = None
 
     model_config = {"populate_by_name": True}
@@ -638,46 +770,10 @@ class TerminalUnitDimensionData(BaseModel):
     model_config = {"populate_by_name": True}
 
 
-class TerminalUnitOutsideAirData(BaseModel):
-    """Terminal unit outside air data."""
+class TerminalUnitConfiguration(EquipmentData):
+    """Modular terminal-unit equipment configuration."""
 
-    custom: float | None = None
-    method: TerminalUnitOutsideAirMethod | None = None
-    percentage: float | None = None
-    previous_method: TerminalUnitOutsideAirMethod | None = Field(
-        default=None, alias="previousMethod"
-    )
-
-    model_config = {"populate_by_name": True}
-
-
-class TerminalUnitSupplyAirData(BaseModel):
-    """Terminal unit supply air data."""
-
-    cooling_temperature: float | None = Field(default=None, alias="coolingTemperature")
-    custom_supply_in: float | None = Field(default=None, alias="customSupplyIn")
-    heating_temperature: float | None = Field(default=None, alias="heatingTemperature")
-
-    model_config = {"populate_by_name": True}
-
-
-class TerminalUnitConfiguration(BaseModel):
-    """Terminal unit configuration."""
-
-    cooling_coil: bool | None = Field(default=None, alias="coolingCoil")
-    cooling_coil_data: CoolingCoilData | None = Field(default=None, alias="coolingCoilData")
-    custom_return_in: float | None = Field(default=None, alias="customReturnIn")
     dimension_data: TerminalUnitDimensionData | None = Field(default=None, alias="dimensionData")
-    heating_coil: bool | None = Field(default=None, alias="heatingCoil")
-    heating_coil_data: HeatingCoilData | None = Field(default=None, alias="heatingCoilData")
-    outside_air_data: TerminalUnitOutsideAirData | None = Field(
-        default=None, alias="outsideAirData"
-    )
-    pressure_loss: float | None = Field(default=None, alias="pressureLoss")
-    return_air: bool | None = Field(default=None, alias="returnAir")
-    supply_air_data: TerminalUnitSupplyAirData | None = Field(default=None, alias="supplyAirData")
-
-    model_config = {"populate_by_name": True}
 
 
 class ZoneData(BaseModel):
@@ -685,11 +781,11 @@ class ZoneData(BaseModel):
 
     color: str | None = None
     configured: bool | None = None
+    equipment_config: TerminalUnitConfiguration | None = Field(
+        default=None, alias="equipmentConfig"
+    )
     name: str | None = None
     system_id: str | None = Field(default=None, alias="systemId")
-    terminal_unit_configuration: TerminalUnitConfiguration | None = Field(
-        default=None, alias="terminalUnitConfiguration"
-    )
 
     model_config = {"populate_by_name": True}
 
@@ -800,6 +896,20 @@ class ReportTemplate(BaseModel):
     id: str
     name: str
     options: dict[str, ReportTemplateOption] | None = None
+
+    model_config = {"populate_by_name": True}
+
+
+class APIReport(BaseModel):
+    """Public report projection returned by an expanded project."""
+
+    id: str
+    name: str
+    status: Literal["pending", "completed", "failed"]
+    download_url: str | None = Field(default=None, alias="downloadUrl")
+    date: float
+    output_file_type: ReportFileType | None = Field(default=None, alias="outputFileType")
+    progress: float | None = None
 
     model_config = {"populate_by_name": True}
 
@@ -948,9 +1058,7 @@ class SpaceTypeData(BaseModel):
     infiltration_winter_area_req: float | None = Field(
         default=None, alias="infiltrationWinterAreaReq"
     )
-    infiltration_winter_lf_req: float | None = Field(
-        default=None, alias="infiltrationWinterLfReq"
-    )
+    infiltration_winter_lf_req: float | None = Field(default=None, alias="infiltrationWinterLfReq")
     lighting_ceiling_load_percent: float | None = Field(
         default=None, alias="lightingCeilingLoadPercent"
     )
@@ -982,12 +1090,8 @@ class WallTypeData(BaseModel):
     """Wall type data."""
 
     ashrae_wall_type_id: str | None = Field(default=None, alias="ashraeWallTypeId")
-    below_grade_cooling_temp_f: float | None = Field(
-        default=None, alias="belowGradeCoolingTempF"
-    )
-    below_grade_heating_temp_f: float | None = Field(
-        default=None, alias="belowGradeHeatingTempF"
-    )
+    below_grade_cooling_temp_f: float | None = Field(default=None, alias="belowGradeCoolingTempF")
+    below_grade_heating_temp_f: float | None = Field(default=None, alias="belowGradeHeatingTempF")
     color: str | None = None
     name: str | None = None
     surface_absorptance: float | None = Field(default=None, alias="surfaceAbsorptance")
@@ -1009,9 +1113,7 @@ class WindowTypeData(BaseModel):
     infiltration_winter_area_req: float | None = Field(
         default=None, alias="infiltrationWinterAreaReq"
     )
-    infiltration_winter_lf_req: float | None = Field(
-        default=None, alias="infiltrationWinterLfReq"
-    )
+    infiltration_winter_lf_req: float | None = Field(default=None, alias="infiltrationWinterLfReq")
     name: str | None = None
     shgc: float | None = None
     timestamp: float | None = None
@@ -1024,12 +1126,9 @@ class WindowTypeData(BaseModel):
 class ProjectData(BaseModel):
     """Project data."""
 
-    # Computed fields
-    owner: str | None = Field(default=None, alias="_owner")
-    user_emails: list[str] | None = Field(default=None, alias="_userEmails")
-
     # Core fields
     address: str | None = None
+    airflow_increment: int | None = Field(default=None, alias="airflowIncrement", ge=1)
     api_created: bool | None = Field(default=None, alias="apiCreated")
     building: BuildingData | None = None
     constraints: dict[str, Constraint] | None = None
@@ -1039,18 +1138,15 @@ class ProjectData(BaseModel):
     contacts: dict[str, Contact] | None = None
     description: str | None = None
     dry_side: DrySideData | None = Field(default=None, alias="drySide")
-    duplicated_from: str | None = Field(default=None, alias="duplicatedFrom")
     elevation: float | None = None
-    from_example: str | None = Field(default=None, alias="fromExample")
-    is_archived: bool | None = Field(default=None, alias="isArchived")
-    is_deleted: bool | None = Field(default=None, alias="isDeleted")
-    is_example: bool | None = Field(default=None, alias="isExample")
-    is_hvakr_template: bool | None = Field(default=None, alias="isHVAKRTemplate")
+    equipment_modes: dict[str, EquipmentMode] = Field(alias="equipmentModes")
+    is_healthcare: bool | None = Field(default=None, alias="isHealthcare")
+    is_open: bool | None = Field(default=None, alias="isOpen")
     is_template: bool | None = Field(default=None, alias="isTemplate")
     last_open_time: float | None = Field(default=None, alias="lastOpenTime")
     latitude: float | None = None
     longitude: float | None = None
-    map_spec: MapSpec | None = Field(default=None, alias="mapSpec")
+    maps: dict[str, MapSpec] | None = None
     name: str
     number: str | None = None
     picture_thumbnail_url: str | None = Field(default=None, alias="pictureThumbnailURL")
@@ -1061,6 +1157,7 @@ class ProjectData(BaseModel):
     revisions: dict[str, Revision] | None = None
     sheet_markers: dict[str, Point] | None = Field(default=None, alias="sheetMarkers")
     standards: dict[str, Standard] | None = None
+    status: Literal["new", "inProgress", "inReview", "done", "archived"] | None = None
     timestamp: float | None = None
     unit_system: DisplayUnitSystemId | None = Field(default=None, alias="unitSystem")
     users: dict[str, ProjectUserData]
@@ -1089,7 +1186,31 @@ class ProjectSubcollections(BaseModel):
     graph: Graph | None = None
     pipe_types: dict[str, PipeTypeData] | None = Field(default=None, alias="pipeTypes")
     register_types: dict[str, RegisterTypeData] | None = Field(default=None, alias="registerTypes")
-    reports: dict[str, ReportData] | None = None
+    reports: dict[str, APIReport] | None = None
+    roof_types: dict[str, RoofTypeData] | None = Field(default=None, alias="roofTypes")
+    sheet_files: dict[str, SheetFileData] | None = Field(default=None, alias="sheetFiles")
+    sheets: dict[str, SheetData] | None = None
+    slab_types: dict[str, SlabTypeData] | None = Field(default=None, alias="slabTypes")
+    space_types: dict[str, SpaceTypeData] | None = Field(default=None, alias="spaceTypes")
+    spaces: dict[str, SpaceData] | None = None
+    systems: dict[str, SystemData] | None = None
+    wall_types: dict[str, WallTypeData] | None = Field(default=None, alias="wallTypes")
+    window_types: dict[str, WindowTypeData] | None = Field(default=None, alias="windowTypes")
+    zones: dict[str, ZoneData] | None = None
+
+    model_config = {"populate_by_name": True}
+
+
+class WritableProjectSubcollections(BaseModel):
+    """Project subcollections accepted by create and update requests."""
+
+    branch_types: dict[str, BranchTypeData] | None = Field(default=None, alias="branchTypes")
+    deadlines: dict[str, DeadlineData] | None = None
+    door_types: dict[str, DoorTypeData] | None = Field(default=None, alias="doorTypes")
+    duct_types: dict[str, DuctTypeData] | None = Field(default=None, alias="ductTypes")
+    graph: Graph | None = None
+    pipe_types: dict[str, PipeTypeData] | None = Field(default=None, alias="pipeTypes")
+    register_types: dict[str, RegisterTypeData] | None = Field(default=None, alias="registerTypes")
     roof_types: dict[str, RoofTypeData] | None = Field(default=None, alias="roofTypes")
     sheet_files: dict[str, SheetFileData] | None = Field(default=None, alias="sheetFiles")
     sheets: dict[str, SheetData] | None = None
@@ -1115,10 +1236,9 @@ class ProjectPost(BaseModel):
 
     # Optional because project can be created with default name
     name: str | None = None
-    # Optional because project can be created with default users
-    users: dict[str, ProjectUserData] | None = None
     # All other ProjectData fields are optional for POST
     address: str | None = None
+    airflow_increment: int | None = Field(default=None, alias="airflowIncrement", ge=1)
     api_created: bool | None = Field(default=None, alias="apiCreated")
     building: BuildingData | None = None
     constraints: dict[str, Constraint] | None = None
@@ -1128,12 +1248,14 @@ class ProjectPost(BaseModel):
     contacts: dict[str, Contact] | None = None
     description: str | None = None
     dry_side: DrySideData | None = Field(default=None, alias="drySide")
+    equipment_modes: dict[str, EquipmentMode] | None = Field(default=None, alias="equipmentModes")
     elevation: float | None = None
     latitude: float | None = None
     longitude: float | None = None
-    map_spec: MapSpec | None = Field(default=None, alias="mapSpec")
+    maps: dict[str, MapSpec] | None = None
     number: str | None = None
     project_type: ProjectType | None = Field(default=None, alias="projectType")
+    status: Literal["new", "inProgress", "inReview", "done", "archived"] | None = None
     unit_system: DisplayUnitSystemId | None = Field(default=None, alias="unitSystem")
     ventilation_standard: VentilationStandard | None = Field(
         default=None, alias="ventilationStandard"
@@ -1144,7 +1266,7 @@ class ProjectPost(BaseModel):
     model_config = {"populate_by_name": True}
 
 
-class ExpandedProjectPost(ProjectPost, ProjectSubcollections):
+class ExpandedProjectPost(ProjectPost, WritableProjectSubcollections):
     """Data for creating a new expanded project."""
 
     pass
@@ -1155,8 +1277,8 @@ class ExpandedProjectPatch(BaseModel):
 
     # All fields from ExpandedProject but optional
     name: str | None = None
-    users: dict[str, ProjectUserData] | None = None
     address: str | None = None
+    airflow_increment: int | None = Field(default=None, alias="airflowIncrement", ge=1)
     building: BuildingData | None = None
     constraints: dict[str, Constraint] | None = None
     construction_type: Literal["New", "Retrofit"] | None = Field(
@@ -1165,12 +1287,14 @@ class ExpandedProjectPatch(BaseModel):
     contacts: dict[str, Contact] | None = None
     description: str | None = None
     dry_side: DrySideData | None = Field(default=None, alias="drySide")
+    equipment_modes: dict[str, EquipmentMode] | None = Field(default=None, alias="equipmentModes")
     elevation: float | None = None
     latitude: float | None = None
     longitude: float | None = None
-    map_spec: MapSpec | None = Field(default=None, alias="mapSpec")
+    maps: dict[str, MapSpec] | None = None
     number: str | None = None
     project_type: ProjectType | None = Field(default=None, alias="projectType")
+    status: Literal["new", "inProgress", "inReview", "done", "archived"] | None = None
     unit_system: DisplayUnitSystemId | None = Field(default=None, alias="unitSystem")
     ventilation_standard: VentilationStandard | None = Field(
         default=None, alias="ventilationStandard"
@@ -1185,7 +1309,6 @@ class ExpandedProjectPatch(BaseModel):
     graph: Graph | None = None
     pipe_types: dict[str, PipeTypeData] | None = Field(default=None, alias="pipeTypes")
     register_types: dict[str, RegisterTypeData] | None = Field(default=None, alias="registerTypes")
-    reports: dict[str, ReportData] | None = None
     roof_types: dict[str, RoofTypeData] | None = Field(default=None, alias="roofTypes")
     sheet_files: dict[str, SheetFileData] | None = Field(default=None, alias="sheetFiles")
     sheets: dict[str, SheetData] | None = None

@@ -28,10 +28,16 @@ Example:
 from hvakr.client import AsyncHVAKRClient, HVAKRClient
 from hvakr.exceptions import HVAKRClientError
 from hvakr.schemas import (
-    APIOutputType,
-    APIProjectOutputDrySideGraph,
-    APIProjectOutputLoads,
-    APIProjectOutputRegisterSchedule,
+    APIJob,
+    APIJobCreate,
+    APIMe,
+    APIMeOrganization,
+    APIMePlan,
+    APIMeRateLimit,
+    APIMeUser,
+    APIProduct,
+    APIProjectCalculations,
+    APIReport,
     Box,
     DisplayUnitSystemId,
     ExpandedProject,
@@ -52,16 +58,14 @@ from hvakr.schemas import (
     ProjectData,
     ProjectPost,
     Rect,
-    RevitData,
     Size,
     UnknownWebhookEvent,
-    WeatherStationData,
     WebhookEvent,
     WebhookEventType,
 )
 from hvakr.webhooks import HVAKRWebhookError, construct_webhook_event
 
-__version__ = "0.1.0"
+__version__ = "0.6.0"
 
 __all__ = [
     # Client classes
@@ -86,11 +90,17 @@ __all__ = [
     "Graph",
     "GraphNode",
     "NodeType",
-    # Output schemas
-    "APIOutputType",
-    "APIProjectOutputDrySideGraph",
-    "APIProjectOutputLoads",
-    "APIProjectOutputRegisterSchedule",
+    # API schemas
+    "APIJob",
+    "APIJobCreate",
+    "APIMe",
+    "APIMeOrganization",
+    "APIMePlan",
+    "APIMeRateLimit",
+    "APIMeUser",
+    "APIProduct",
+    "APIProjectCalculations",
+    "APIReport",
     # Project schemas
     "ExpandedProject",
     "ExpandedProjectPatch",
@@ -98,10 +108,6 @@ __all__ = [
     "Project",
     "ProjectData",
     "ProjectPost",
-    # Revit schemas
-    "RevitData",
-    # Weather schemas
-    "WeatherStationData",
     # Webhook schemas
     "KnownWebhookEvent",
     "OpportunityCreatedEvent",

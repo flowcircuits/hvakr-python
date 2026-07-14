@@ -28,6 +28,7 @@ class RegisterModelType(str, Enum):
 
     CEILING_SQUARE = "ceilingSquare"
     CEILING_LINEAR = "ceilingLinear"
+    SIDEWALL = "sidewall"
 
 
 class ErrorInfo(BaseModel):
@@ -327,5 +328,119 @@ class APIProjectOutputDrySideGraph(BaseModel):
 
     dryside_graph: MetaDrySideGraph = Field(alias="drySideGraph")
     errors: list[ErrorInfo]
+
+    model_config = {"populate_by_name": True}
+
+
+# Unified calculation response schemas (v0.4+)
+class Airflows(BaseModel):
+    """Supply, return, outside, relief, and exhaust airflow totals."""
+
+    exhaust: float
+    outside: float
+    relief: float
+    return_air: float = Field(alias="return")
+    supply: float
+
+    model_config = {"populate_by_name": True}
+
+
+class ModeAirflows(BaseModel):
+    """Design and required airflows for one equipment mode."""
+
+    airflow_differential: dict[str, float] = Field(alias="airflowDifferential")
+    design: Airflows
+    required: Airflows
+    space_peaks_sum: Airflows = Field(alias="spacePeaksSum")
+    supply_sources: dict[str, float] = Field(alias="supplySources")
+    month_hour: dict[str, float] | None = Field(default=None, alias="monthHour")
+
+    model_config = {"populate_by_name": True}
+
+
+class MaximumModeAirflows(BaseModel):
+    """The peak design and required airflows across the project's modes."""
+
+    airflow_differential: dict[str, float] = Field(alias="airflowDifferential")
+    design: Airflows
+    required: Airflows
+
+    model_config = {"populate_by_name": True}
+
+
+class ProjectScopeAirflows(BaseModel):
+    """Mode-keyed airflows for a project, space, zone, or system."""
+
+    by_mode: dict[str, ModeAirflows] = Field(alias="byMode")
+    calculated_outside_airflow: dict[str, float] = Field(alias="calculatedOutsideAirflow")
+    max: MaximumModeAirflows
+    required_outside_airflow_components: dict[str, Any] = Field(
+        alias="requiredOutsideAirflowComponents"
+    )
+
+    model_config = {"populate_by_name": True}
+
+
+class CalcLoadsSection(BaseModel):
+    """Cooling and heating loads for each project scope."""
+
+    space_cooling_loads: dict[str, CoolingLoads] = Field(alias="spaceCoolingLoads")
+    space_heating_loads: dict[str, HeatingLoads] = Field(alias="spaceHeatingLoads")
+    system_cooling_loads: dict[str, CoolingLoads] = Field(alias="systemCoolingLoads")
+    system_heating_loads: dict[str, HeatingLoads] = Field(alias="systemHeatingLoads")
+    zone_cooling_loads: dict[str, CoolingLoads] = Field(alias="zoneCoolingLoads")
+    zone_heating_loads: dict[str, HeatingLoads] = Field(alias="zoneHeatingLoads")
+
+    model_config = {"populate_by_name": True}
+
+
+class CalcVentilationSection(BaseModel):
+    """Ventilation results keyed by project scope and equipment id."""
+
+    project: dict[str, Any] | None = None
+    spaces: dict[str, dict[str, Any]]
+    systems: dict[str, dict[str, Any]]
+    zones: dict[str, dict[str, Any]]
+    equipment: dict[str, dict[str, Any]]
+
+
+class CalcChecksumsSection(BaseModel):
+    """Mode-keyed design checksums for each scope and equipment item."""
+
+    project: dict[str, dict[str, float | None]] | None = None
+    spaces: dict[str, dict[str, dict[str, float | None]]]
+    systems: dict[str, dict[str, dict[str, float | None]]]
+    zones: dict[str, dict[str, dict[str, float | None]]]
+    equipment: dict[str, dict[str, dict[str, float | None]]]
+
+
+class CalcAirflowsSection(BaseModel):
+    """Mode-keyed airflow results for every project scope."""
+
+    project: ProjectScopeAirflows | None = None
+    spaces: dict[str, ProjectScopeAirflows]
+    systems: dict[str, ProjectScopeAirflows]
+    zones: dict[str, ProjectScopeAirflows]
+
+
+class APIProjectCalculations(BaseModel):
+    """Response from ``GET /projects/{id}/calculations``.
+
+    ``equipment`` intentionally preserves component pipeline data verbatim:
+    pipeline components are extensible and are keyed by project-defined mode
+    and component ids.
+    """
+
+    errors: list[ErrorInfo]
+    flags: dict[str, list[dict[str, Any]]]
+    loads: CalcLoadsSection | None = None
+    register_schedule: list[SpaceRegisterScheduleRow] | None = Field(
+        default=None, alias="registerSchedule"
+    )
+    dry_side_graph: MetaDrySideGraph | None = Field(default=None, alias="drySideGraph")
+    ventilation: CalcVentilationSection | None = None
+    equipment: dict[str, dict[str, Any]] | None = None
+    checksums: CalcChecksumsSection | None = None
+    airflows: CalcAirflowsSection | None = None
 
     model_config = {"populate_by_name": True}
