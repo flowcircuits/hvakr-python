@@ -28,6 +28,7 @@ class RegisterModelType(str, Enum):
 
     CEILING_SQUARE = "ceilingSquare"
     CEILING_LINEAR = "ceilingLinear"
+    SIDEWALL = "sidewall"
 
 
 class ErrorInfo(BaseModel):
@@ -360,8 +361,11 @@ class ModeAirflows(BaseModel):
 class MaximumModeAirflows(BaseModel):
     """The peak design and required airflows across the project's modes."""
 
+    airflow_differential: dict[str, float] = Field(alias="airflowDifferential")
     design: Airflows
     required: Airflows
+
+    model_config = {"populate_by_name": True}
 
 
 class ProjectScopeAirflows(BaseModel):

@@ -236,7 +236,11 @@ class TestSchemaValidation:
                     "project": {
                         "byMode": {"cooling_mode": mode_airflows},
                         "calculatedOutsideAirflow": {"cooling": 100, "heating": 0, "max": 100},
-                        "max": {"design": airflow_totals, "required": airflow_totals},
+                        "max": {
+                            "airflowDifferential": {"design": 20, "required": 10},
+                            "design": airflow_totals,
+                            "required": airflow_totals,
+                        },
                         "requiredOutsideAirflowComponents": {
                             "code": {"ach": 0},
                             "load": {"area": 0, "people": 0, "total": 0},
@@ -252,6 +256,39 @@ class TestSchemaValidation:
         cooling = calculations.airflows.project.by_mode["cooling_mode"]
         assert cooling.design.supply == 400
         assert calculations.airflows.project.max.required.outside == 100
+        assert calculations.airflows.project.max.airflow_differential == {
+            "design": 20,
+            "required": 10,
+        }
+
+    def test_calculations_accept_sidewall_register_schedule_rows(self) -> None:
+        calculations = APIProjectCalculations.model_validate(
+            {
+                "errors": [],
+                "flags": {},
+                "registerSchedule": [
+                    {
+                        "configuration": "Supply",
+                        "flowType": "SUPPLY",
+                        "inletSize": "6 in.",
+                        "manufacturer": "Example Manufacturer",
+                        "model": "Example Model",
+                        "modelType": "sidewall",
+                        "quantity": 1,
+                        "registerCFM": 100,
+                        "registerFPM": 500,
+                        "registerNC": 20,
+                        "registerSize": "12 x 4 in.",
+                        "spaceName": "Office",
+                        "spaceNumber": "101",
+                        "totalCFM": 100,
+                    }
+                ],
+            }
+        )
+
+        assert calculations.register_schedule is not None
+        assert calculations.register_schedule[0].model_type.value == "sidewall"
 
     def test_equipment_mode_and_terminal_config_round_trip(self) -> None:
         mode = EquipmentMode(
