@@ -149,6 +149,32 @@ products = client.list_products(search="fan")
 identity = client.me()
 ```
 
+### Upload a sheet PDF
+
+Upload one PDF (maximum 30 MiB), then poll the returned `sheet-upload` job.
+`file_name` remains the source-file identity; `name` is only a display name.
+
+```python
+with open("A-Plans.pdf", "rb") as pdf:
+    job = client.create_sheet_file(
+        "project-id",
+        pdf,
+        "A-Plans.pdf",
+        name="Architectural Plans",
+        idempotency_key="unique-upload-key",
+    )
+
+while job.status in {"queued", "running"}:
+    job = client.get_job("project-id", job.job_id)
+
+if job.type == "sheet-upload" and job.result and job.result.ready_for_takeoff:
+    client.create_job("project-id", {"type": "auto-takeoff"})
+```
+
+If `ready_for_takeoff` is false, patch the project `sheets` subcollection to
+place an eligible page before auto-takeoff. Auto-takeoff is project-wide, not
+limited to this upload.
+
 ## v0.6 migration notes
 
 This SDK follows the breaking HVAKR v0.6 API:

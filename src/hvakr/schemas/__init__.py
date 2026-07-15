@@ -9,6 +9,8 @@ from hvakr.schemas.api import (
     APIMeRateLimit,
     APIMeUser,
     APIProduct,
+    APISheetUploadJobResult,
+    APISheetUploadPage,
     ProductListResponse,
     ProjectListItem,
     ProjectListResponse,
@@ -70,6 +72,8 @@ from hvakr.schemas.webhooks import (
 __all__ = [
     "APIJob",
     "APIJobCreate",
+    "APISheetUploadJobResult",
+    "APISheetUploadPage",
     "APIMe",
     "APIMeOrganization",
     "APIMePlan",

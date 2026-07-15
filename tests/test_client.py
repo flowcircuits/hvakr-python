@@ -43,7 +43,7 @@ class TestHVAKRClient:
         client = HVAKRClient(access_token="my-secret-token")
         assert client._get_auth_headers() == {
             "Authorization": "Bearer my-secret-token",
-            "X-HVAKR-Client": "hvakr-python/0.6.0",
+            "X-HVAKR-Client": "hvakr-python/0.6.1",
         }
 
     def test_list_projects_is_paginated_and_filterable(self, httpx_mock: HTTPXMock) -> None:
@@ -117,7 +117,7 @@ class TestHVAKRClient:
         request = httpx_mock.get_requests()[0]
         assert result == {"id": "new-project"}
         assert request.headers["Idempotency-Key"] == "create-1"
-        assert request.headers["X-HVAKR-Client"] == "hvakr-python/0.6.0"
+        assert request.headers["X-HVAKR-Client"] == "hvakr-python/0.6.1"
 
     def test_get_project_calculations_selects_sections(self, httpx_mock: HTTPXMock) -> None:
         httpx_mock.add_response(
@@ -165,6 +165,50 @@ class TestHVAKRClient:
         assert job.job_id == "job-1"
         assert products.products[0].id == "fan-1"
         assert me.rate_limit.limit_per_minute == 60
+
+    def test_create_sheet_file_posts_pdf_multipart_and_parses_job(
+        self, httpx_mock: HTTPXMock
+    ) -> None:
+        httpx_mock.add_response(
+            url="https://api.hvakr.com/v0/projects/project-123/sheet-files",
+            status_code=202,
+            json={
+                "jobId": "job-sheet-1",
+                "type": "sheet-upload",
+                "status": "queued",
+                "result": {
+                    "sheetFileId": "sheet-file-1",
+                    "sourceFileName": "A-Plans.pdf",
+                    "name": "Architectural Plans",
+                    "pagesProcessed": 0,
+                    "placedSheets": 0,
+                    "pages": [],
+                },
+            },
+        )
+
+        with HVAKRClient(access_token="test-token") as client:
+            job = client.create_sheet_file(
+                "project-123",
+                b"%PDF-1.7",
+                "A-Plans.pdf",
+                name="Architectural Plans",
+                idempotency_key="sheet-upload-1",
+            )
+
+        request = httpx_mock.get_requests()[0]
+        assert request.headers["Idempotency-Key"] == "sheet-upload-1"
+        assert request.headers["Content-Type"].startswith("multipart/form-data; boundary=")
+        assert b'filename="A-Plans.pdf"' in request.content
+        assert b"\r\nArchitectural Plans\r\n" in request.content
+        assert job.type == "sheet-upload"
+        assert job.result is not None
+        assert job.result.sheet_file_id == "sheet-file-1"
+
+    def test_create_sheet_file_preflights_30_mib_limit(self) -> None:
+        with HVAKRClient(access_token="test-token") as client:
+            with pytest.raises(ValueError, match="30 MiB"):
+                client.create_sheet_file("project-123", b"x" * (30 * 1024 * 1024 + 1), "large.pdf")
 
     def test_error_response_exposes_status_and_metadata(self, httpx_mock: HTTPXMock) -> None:
         httpx_mock.add_response(

@@ -54,13 +54,43 @@ class APIJobCreate(BaseModel):
     model_config = {"populate_by_name": True}
 
 
+class APISheetUploadPage(BaseModel):
+    """An actionable PDF page returned by a sheet-upload job."""
+
+    id: str
+    page_number: int = Field(alias="pageNumber")
+    sheet_number: str | None = Field(default=None, alias="sheetNumber")
+    sheet_type: str | None = Field(default=None, alias="sheetType")
+    detected_level: float | None = Field(default=None, alias="detectedLevel")
+    scale: float | None = None
+    status: Literal["queued", "running", "completed", "failed"]
+    error: str | None = None
+    placed: bool
+
+    model_config = {"populate_by_name": True}
+
+
+class APISheetUploadJobResult(BaseModel):
+    """Live result derived from an uploaded sheet file and its pages."""
+
+    sheet_file_id: str = Field(alias="sheetFileId")
+    source_file_name: str = Field(alias="sourceFileName")
+    name: str | None = None
+    ready_for_takeoff: bool | None = Field(default=None, alias="readyForTakeoff")
+    pages_processed: int = Field(alias="pagesProcessed")
+    placed_sheets: int = Field(alias="placedSheets")
+    pages: list[APISheetUploadPage]
+
+    model_config = {"populate_by_name": True}
+
+
 class APIJob(BaseModel):
     """An asynchronous or synchronous job returned by the API."""
 
     job_id: str = Field(alias="jobId")
-    type: Literal["report", "auto-group", "check", "auto-takeoff"]
+    type: Literal["report", "auto-group", "check", "auto-takeoff", "sheet-upload"]
     status: Literal["queued", "running", "completed", "failed"]
-    result: dict[str, Any] | None = None
+    result: APISheetUploadJobResult | dict[str, Any] | None = None
     error: str | None = None
 
     model_config = {"populate_by_name": True}

@@ -38,6 +38,8 @@ from hvakr.schemas import (
     APIProduct,
     APIProjectCalculations,
     APIReport,
+    APISheetUploadJobResult,
+    APISheetUploadPage,
     Box,
     DisplayUnitSystemId,
     ExpandedProject,
@@ -65,7 +67,7 @@ from hvakr.schemas import (
 )
 from hvakr.webhooks import HVAKRWebhookError, construct_webhook_event
 
-__version__ = "0.6.0"
+__version__ = "0.6.1"
 
 __all__ = [
     # Client classes
@@ -93,6 +95,8 @@ __all__ = [
     # API schemas
     "APIJob",
     "APIJobCreate",
+    "APISheetUploadJobResult",
+    "APISheetUploadPage",
     "APIMe",
     "APIMeOrganization",
     "APIMePlan",

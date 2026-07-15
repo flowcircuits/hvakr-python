@@ -2,7 +2,7 @@
 
 import logging
 from collections.abc import Mapping, Sequence
-from typing import Any, Literal, overload
+from typing import Any, BinaryIO, Literal, overload
 from urllib.parse import quote
 
 import httpx
@@ -26,9 +26,10 @@ from hvakr.schemas.project import (
     ProjectPost,
 )
 
-__version__ = "0.6.0"
+__version__ = "0.6.1"
 _LOGGER = logging.getLogger(__name__)
 _WARNED_CLIENT_MESSAGES: set[str] = set()
+MAX_API_SHEET_UPLOAD_BYTES = 30 * 1024 * 1024
 _ProjectSubcollectionKey = Literal[
     "branchTypes",
     "deadlines",
@@ -113,6 +114,21 @@ class _ClientBase:
         if idempotency_key:
             headers["Idempotency-Key"] = idempotency_key
         return headers
+
+    def _multipart_write_headers(self, idempotency_key: str | None = None) -> dict[str, str]:
+        headers = {**self._get_auth_headers(), "Accept": "application/json"}
+        if idempotency_key:
+            headers["Idempotency-Key"] = idempotency_key
+        return headers
+
+    @staticmethod
+    def _sheet_upload_content(file: bytes | BinaryIO) -> bytes:
+        content = file if isinstance(file, bytes) else file.read()
+        if not isinstance(content, bytes):
+            raise TypeError("Sheet upload file must provide bytes.")
+        if len(content) > MAX_API_SHEET_UPLOAD_BYTES:
+            raise ValueError("Sheet PDF exceeds the 30 MiB API upload limit.")
+        return content
 
     @staticmethod
     def _payload(data: BaseModel | Mapping[str, Any]) -> dict[str, Any]:
@@ -323,6 +339,25 @@ class HVAKRClient(_ClientBase):
         )
         return APIJob.model_validate(self._handle_response(response))
 
+    def create_sheet_file(
+        self,
+        project_id: str,
+        file: bytes | BinaryIO,
+        file_name: str,
+        *,
+        name: str | None = None,
+        idempotency_key: str | None = None,
+    ) -> APIJob:
+        """Upload one PDF and return its multipart-only ``sheet-upload`` job."""
+        content = self._sheet_upload_content(file)
+        response = self._http_client.post(
+            self._create_url(f"/projects/{self._encode_path_segment(project_id)}/sheet-files"),
+            headers=self._multipart_write_headers(idempotency_key),
+            files={"file": (file_name, content, "application/pdf")},
+            data={"name": name} if name is not None else None,
+        )
+        return APIJob.model_validate(self._handle_response(response))
+
     def get_job(self, project_id: str, job_id: str) -> APIJob:
         response = self._http_client.get(
             self._create_url(
@@ -500,6 +535,25 @@ class AsyncHVAKRClient(_ClientBase):
             self._create_url(f"/projects/{self._encode_path_segment(project_id)}/jobs"),
             headers=self._write_headers(idempotency_key),
             json=self._payload(body),
+        )
+        return APIJob.model_validate(self._handle_response(response))
+
+    async def create_sheet_file(
+        self,
+        project_id: str,
+        file: bytes | BinaryIO,
+        file_name: str,
+        *,
+        name: str | None = None,
+        idempotency_key: str | None = None,
+    ) -> APIJob:
+        """Upload one PDF and return its multipart-only ``sheet-upload`` job."""
+        content = self._sheet_upload_content(file)
+        response = await self._http_client.post(
+            self._create_url(f"/projects/{self._encode_path_segment(project_id)}/sheet-files"),
+            headers=self._multipart_write_headers(idempotency_key),
+            files={"file": (file_name, content, "application/pdf")},
+            data={"name": name} if name is not None else None,
         )
         return APIJob.model_validate(self._handle_response(response))
 
