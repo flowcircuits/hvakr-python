@@ -5,11 +5,11 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 from hvakr.schemas.common import DisplayUnitSystemId
-from hvakr.schemas.project import ProjectType
+from hvakr.schemas.project import FirebaseUID, ProjectType, ProjectUserData
 
 
 class ProjectListItem(BaseModel):
-    """A compact project returned by the paginated list endpoint."""
+    """A project returned by the paginated list endpoint."""
 
     id: str
     name: str | None = None
@@ -19,6 +19,7 @@ class ProjectListItem(BaseModel):
     project_type: ProjectType | None = Field(default=None, alias="projectType")
     timestamp: float | None = None
     last_open_time: float | None = Field(default=None, alias="lastOpenTime")
+    users: dict[FirebaseUID, ProjectUserData]
 
     model_config = {"populate_by_name": True}
 

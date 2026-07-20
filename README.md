@@ -93,6 +93,22 @@ project = client.get_project("project-id")
 expanded = client.get_project("project-id", expand=True)
 ```
 
+#### Project membership
+
+Every project response, including paginated and expanded responses, exposes a
+read-only `users` map keyed by Firebase UID. The key is an opaque identifier;
+use each entry's required `email` field for display or email-based matching.
+
+```python
+project = client.get_project("project-id")
+
+for firebase_uid, member in project.users.items():
+    print(firebase_uid, member.email, member.role)
+```
+
+Do not send `users` in create or update requests. Project membership remains a
+restricted write field in the API.
+
 #### create_project(project_data, idempotency_key=None)
 
 Create a new project.
@@ -148,6 +164,12 @@ job = client.get_job("project-id", job.job_id)
 products = client.list_products(search="fan")
 identity = client.me()
 ```
+
+## v1.0 migration notes
+
+Project membership is now keyed by Firebase UID rather than email address. If
+your integration used `project.users[email]`, iterate the UID-keyed entries and
+read `member.email` instead. Every member entry now includes `email`.
 
 ## v0.6 migration notes
 

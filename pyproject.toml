@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "hvakr"
-version = "0.6.0"
+version = "1.0.0"
 description = "Official Python SDK for the HVAKR API - HVAC load calculation and building analysis"
 readme = "README.md"
 license = "MIT"

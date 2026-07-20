@@ -43,6 +43,7 @@ from hvakr.schemas import (
     ExpandedProject,
     ExpandedProjectPatch,
     ExpandedProjectPost,
+    FirebaseUID,
     FlowType,
     Graph,
     GraphNode,
@@ -57,6 +58,8 @@ from hvakr.schemas import (
     ProjectCreatedPayload,
     ProjectData,
     ProjectPost,
+    ProjectUserData,
+    ProjectUserRole,
     Rect,
     Size,
     UnknownWebhookEvent,
@@ -65,7 +68,7 @@ from hvakr.schemas import (
 )
 from hvakr.webhooks import HVAKRWebhookError, construct_webhook_event
 
-__version__ = "0.6.0"
+__version__ = "1.0.0"
 
 __all__ = [
     # Client classes
@@ -105,9 +108,12 @@ __all__ = [
     "ExpandedProject",
     "ExpandedProjectPatch",
     "ExpandedProjectPost",
+    "FirebaseUID",
     "Project",
     "ProjectData",
     "ProjectPost",
+    "ProjectUserData",
+    "ProjectUserRole",
     # Webhook schemas
     "KnownWebhookEvent",
     "OpportunityCreatedEvent",

@@ -1,7 +1,7 @@
 """Project schema definitions."""
 
 from enum import Enum
-from typing import Any, Literal
+from typing import Any, Literal, TypeAlias
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -56,6 +56,10 @@ class ProjectUserRole(int, Enum):
     MEMBER = 4
     ADMIN = 8
     OWNER = 10
+
+
+# Firebase Auth UIDs are opaque strings. They are the keys of a project's users map.
+FirebaseUID: TypeAlias = str
 
 
 class InfiltrationRequirementMethod(str, Enum):
@@ -308,15 +312,15 @@ class Revision(BaseModel):
 
 
 class ProjectUserData(BaseModel):
-    """User data within a project."""
+    """A read-only project member entry, indexed by Firebase UID in ``ProjectData.users``."""
 
+    email: str
+    role: ProjectUserRole
     active: bool | None = None
     first_name: str | None = Field(default=None, alias="firstName")
     last_active: float | None = Field(default=None, alias="lastActive")
     last_name: str | None = Field(default=None, alias="lastName")
-    pending_sign_up: bool | None = Field(default=None, alias="pendingSignUp")
     profile_picture: str | None = Field(default=None, alias="profilePicture")
-    role: ProjectUserRole
 
     model_config = {"populate_by_name": True}
 
@@ -1160,7 +1164,7 @@ class ProjectData(BaseModel):
     status: Literal["new", "inProgress", "inReview", "done", "archived"] | None = None
     timestamp: float | None = None
     unit_system: DisplayUnitSystemId | None = Field(default=None, alias="unitSystem")
-    users: dict[str, ProjectUserData]
+    users: dict[FirebaseUID, ProjectUserData]
     ventilation_standard: VentilationStandard | None = Field(
         default=None, alias="ventilationStandard"
     )

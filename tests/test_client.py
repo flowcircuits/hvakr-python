@@ -1,6 +1,7 @@
-"""Tests for the HVAKR v0.6 client surface."""
+"""Tests for the HVAKR v1.0 client surface."""
 
 import pytest
+from pydantic import ValidationError
 from pytest_httpx import HTTPXMock
 
 from hvakr import APIProjectCalculations, AsyncHVAKRClient, HVAKRClient, HVAKRClientError, Project
@@ -28,6 +29,15 @@ DEFAULT_EQUIPMENT_MODES = {
     },
 }
 
+PROJECT_USERS_BY_UID = {
+    "firebase-uid-123": {
+        "email": "member@example.com",
+        "role": 10,
+        "firstName": "Member",
+        "lastName": "Example",
+    }
+}
+
 
 class TestHVAKRClient:
     """Tests for the synchronous client."""
@@ -43,7 +53,7 @@ class TestHVAKRClient:
         client = HVAKRClient(access_token="my-secret-token")
         assert client._get_auth_headers() == {
             "Authorization": "Bearer my-secret-token",
-            "X-HVAKR-Client": "hvakr-python/0.6.0",
+            "X-HVAKR-Client": "hvakr-python/1.0.0",
         }
 
     def test_list_projects_is_paginated_and_filterable(self, httpx_mock: HTTPXMock) -> None:
@@ -53,7 +63,14 @@ class TestHVAKRClient:
                 "&status=inProgress&projectType=commercial"
             ),
             json={
-                "projects": [{"id": "project-1", "name": "Office", "status": "inProgress"}],
+                "projects": [
+                    {
+                        "id": "project-1",
+                        "name": "Office",
+                        "status": "inProgress",
+                        "users": PROJECT_USERS_BY_UID,
+                    }
+                ],
                 "hasMore": True,
                 "nextCursor": "again",
             },
@@ -69,6 +86,7 @@ class TestHVAKRClient:
             )
 
         assert result.projects[0].id == "project-1"
+        assert result.projects[0].users["firebase-uid-123"].email == "member@example.com"
         assert result.has_more is True
         assert result.next_cursor == "again"
 
@@ -78,7 +96,7 @@ class TestHVAKRClient:
             json={
                 "id": "project-123",
                 "name": "Test Project",
-                "users": {"user-1": {"role": 10}},
+                "users": PROJECT_USERS_BY_UID,
                 "equipmentModes": DEFAULT_EQUIPMENT_MODES,
             },
         )
@@ -88,6 +106,8 @@ class TestHVAKRClient:
 
         assert isinstance(result, Project)
         assert result.equipment_modes["cooling_mode"].load_condition is LoadCondition.COOLING
+        assert set(result.users) == {"firebase-uid-123"}
+        assert result.users["firebase-uid-123"].email == "member@example.com"
 
     def test_get_project_can_expand_selected_subcollections(self, httpx_mock: HTTPXMock) -> None:
         httpx_mock.add_response(
@@ -95,7 +115,7 @@ class TestHVAKRClient:
             json={
                 "id": "project-123",
                 "name": "Test Project",
-                "users": {"user-1": {"role": 10}},
+                "users": PROJECT_USERS_BY_UID,
                 "equipmentModes": DEFAULT_EQUIPMENT_MODES,
                 "spaces": {},
                 "zones": {},
@@ -117,7 +137,7 @@ class TestHVAKRClient:
         request = httpx_mock.get_requests()[0]
         assert result == {"id": "new-project"}
         assert request.headers["Idempotency-Key"] == "create-1"
-        assert request.headers["X-HVAKR-Client"] == "hvakr-python/0.6.0"
+        assert request.headers["X-HVAKR-Client"] == "hvakr-python/1.0.0"
 
     def test_get_project_calculations_selects_sections(self, httpx_mock: HTTPXMock) -> None:
         httpx_mock.add_response(
@@ -206,6 +226,31 @@ class TestAsyncHVAKRClient:
 
 class TestSchemaValidation:
     """Tests for the modular-equipment data model."""
+
+    def test_project_users_require_email_and_are_indexed_by_uid(self) -> None:
+        project = Project.model_validate(
+            {
+                "id": "project-123",
+                "name": "Test Project",
+                "users": PROJECT_USERS_BY_UID,
+                "equipmentModes": DEFAULT_EQUIPMENT_MODES,
+            }
+        )
+
+        firebase_uid, member = next(iter(project.users.items()))
+        assert firebase_uid == "firebase-uid-123"
+        assert member.email == "member@example.com"
+
+    def test_project_rejects_the_previous_email_keyed_membership_shape(self) -> None:
+        with pytest.raises(ValidationError, match="email"):
+            Project.model_validate(
+                {
+                    "id": "project-123",
+                    "name": "Test Project",
+                    "users": {"member@example.com": {"role": 10}},
+                    "equipmentModes": DEFAULT_EQUIPMENT_MODES,
+                }
+            )
 
     def test_calculations_preserve_airflows_by_project_mode(self) -> None:
         airflow_totals = {

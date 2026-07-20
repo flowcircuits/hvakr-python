@@ -26,7 +26,7 @@ from hvakr.schemas.project import (
     ProjectPost,
 )
 
-__version__ = "0.6.0"
+__version__ = "1.0.0"
 _LOGGER = logging.getLogger(__name__)
 _WARNED_CLIENT_MESSAGES: set[str] = set()
 _ProjectSubcollectionKey = Literal[
