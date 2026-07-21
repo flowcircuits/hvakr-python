@@ -320,6 +320,7 @@ class ProjectUserData(BaseModel):
     first_name: str | None = Field(default=None, alias="firstName")
     last_active: float | None = Field(default=None, alias="lastActive")
     last_name: str | None = Field(default=None, alias="lastName")
+    pending_sign_up: bool | None = Field(default=None, alias="pendingSignUp")
     profile_picture: str | None = Field(default=None, alias="profilePicture")
 
     model_config = {"populate_by_name": True}

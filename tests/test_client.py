@@ -241,6 +241,24 @@ class TestSchemaValidation:
         assert firebase_uid == "firebase-uid-123"
         assert member.email == "member@example.com"
 
+    def test_project_users_preserve_pending_sign_up(self) -> None:
+        project = Project.model_validate(
+            {
+                "id": "project-123",
+                "name": "Test Project",
+                "users": {
+                    "firebase-uid-invitee": {
+                        "email": "invitee@example.com",
+                        "role": 1,
+                        "pendingSignUp": True,
+                    }
+                },
+                "equipmentModes": DEFAULT_EQUIPMENT_MODES,
+            }
+        )
+
+        assert project.users["firebase-uid-invitee"].pending_sign_up is True
+
     def test_project_rejects_the_previous_email_keyed_membership_shape(self) -> None:
         with pytest.raises(ValidationError, match="email"):
             Project.model_validate(
