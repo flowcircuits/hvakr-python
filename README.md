@@ -57,14 +57,16 @@ Both clients provide the same methods. The async client methods are coroutines t
 ```python
 HVAKRClient(
     access_token: str,
-    base_url: str = "https://api.hvakr.com",
+    base_url: str | None = None,
     version: str = "v0",
     timeout: float = 30.0,
 )
 ```
 
 - `access_token`: Your HVAKR API access token
-- `base_url`: API base URL (default: "https://api.hvakr.com")
+- `base_url`: API base URL. When omitted, the client uses the `HVAKR_BASE_URL`
+  environment variable if it is set and not empty, else `"https://api.hvakr.com"`.
+  An explicit argument always wins. Requests go to `{base_url}/{version}{path}`.
 - `version`: API version (default: "v0")
 - `timeout`: Request timeout in seconds (default: 30.0)
 
@@ -148,6 +150,37 @@ job = client.get_job("project-id", job.job_id)
 products = client.list_products(search="fan")
 identity = client.me()
 ```
+
+### Sheet and file downloads
+
+Download a sheet page as PDF or PNG, or a project file. Each method returns the
+bytes, or streams them to `path` and returns that `Path`. The file at `path` is
+replaced only after the full response arrives; on an error it is left as it was.
+Non-success responses (for example 413 when the object exceeds the server's size
+cap) raise `HVAKRClientError`.
+
+```python
+pdf = client.download_sheet("project-id", "M-101")  # bytes
+client.download_sheet("project-id", "M-101", format="png", path="M-101.png")
+client.download_file("project-id", "file-id", path="files/rooms.csv")
+```
+
+The client calls `GET /projects/{projectId}/sheets/{sheetId}/pdf`,
+`/sheets/{sheetId}/png`, and `/files/{fileId}/content`. These routes are part of
+the planned sandbox `/agent/v0` API (HSF-1453) and are not on the public
+`https://api.hvakr.com/v0` API yet.
+
+### Differences from the TypeScript SDK
+
+These [TypeScript SDK](https://github.com/flowcircuits/hvakr-client) features
+are not in this SDK yet:
+
+- `createSheetFile` (multipart sheet PDF upload) has no Python method.
+- `searchProducts({ type })`: `list_products` has no `type` filter.
+- The typed `expand` keys do not include `annotations`, `equipment`, `exports`,
+  or `sheetFilePages`.
+
+`download_sheet` and `download_file` have no TypeScript equivalent yet.
 
 ## v0.6 migration notes
 

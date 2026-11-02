@@ -43,7 +43,7 @@ class TestHVAKRClient:
         client = HVAKRClient(access_token="my-secret-token")
         assert client._get_auth_headers() == {
             "Authorization": "Bearer my-secret-token",
-            "X-HVAKR-Client": "hvakr-python/0.6.0",
+            "X-HVAKR-Client": "hvakr-python/0.6.1",
         }
 
     def test_list_projects_is_paginated_and_filterable(self, httpx_mock: HTTPXMock) -> None:
@@ -117,7 +117,7 @@ class TestHVAKRClient:
         request = httpx_mock.get_requests()[0]
         assert result == {"id": "new-project"}
         assert request.headers["Idempotency-Key"] == "create-1"
-        assert request.headers["X-HVAKR-Client"] == "hvakr-python/0.6.0"
+        assert request.headers["X-HVAKR-Client"] == "hvakr-python/0.6.1"
 
     def test_get_project_calculations_selects_sections(self, httpx_mock: HTTPXMock) -> None:
         httpx_mock.add_response(
