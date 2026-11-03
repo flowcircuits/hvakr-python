@@ -2,6 +2,7 @@
 
 import logging
 import os
+import secrets
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any, Literal, overload
@@ -194,7 +195,8 @@ class _ClientBase:
 
     @staticmethod
     def _partial_path(path: Path) -> Path:
-        return path.with_name(f".{path.name}.part")
+        """Return a temp sibling of ``path`` that is unique to one download."""
+        return path.with_name(f".{path.name}.{secrets.token_hex(8)}.part")
 
     @staticmethod
     def _remove_partial(partial: Path) -> None:
@@ -422,7 +424,7 @@ class HVAKRClient(_ClientBase):
                 response.read()
             self._check_download_response(response)
             try:
-                with partial.open("wb") as file:
+                with partial.open("xb") as file:
                     for chunk in response.iter_bytes():
                         file.write(chunk)
                 partial.replace(target)
@@ -665,7 +667,7 @@ class AsyncHVAKRClient(_ClientBase):
                 await response.aread()
             self._check_download_response(response)
             try:
-                with partial.open("wb") as file:
+                with partial.open("xb") as file:
                     async for chunk in response.aiter_bytes():
                         file.write(chunk)
                 partial.replace(target)

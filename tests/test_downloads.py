@@ -1,7 +1,12 @@
 """Tests for the base URL default and the sheet and file byte downloads."""
 
+import asyncio
+import threading
+from collections.abc import AsyncIterator, Iterator
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
+import httpx
 import pytest
 from pytest_httpx import HTTPXMock
 
@@ -211,6 +216,108 @@ class TestAsyncDownloads:
         assert exc_info.value.status_code == 413
         assert exc_info.value.metadata == body
         assert list(tmp_path.iterdir()) == []
+
+    async def test_download_error_keeps_existing_file(
+        self, httpx_mock: HTTPXMock, tmp_path: Path
+    ) -> None:
+        httpx_mock.add_response(
+            url="https://api.hvakr.com/v0/projects/p1/files/f1/content",
+            status_code=500,
+            text="Internal Server Error",
+        )
+        target = tmp_path / "rooms.csv"
+        target.write_bytes(b"old")
+
+        async with AsyncHVAKRClient(access_token="test-token") as client:
+            with pytest.raises(HVAKRClientError):
+                await client.download_file("p1", "f1", path=target)
+
+        assert target.read_bytes() == b"old"
+        assert list(tmp_path.iterdir()) == [target]
+
+
+class _GatedSyncStream(httpx.SyncByteStream):
+    """Send the body in two chunks and wait at a barrier between them."""
+
+    def __init__(self, body: bytes, barrier: threading.Barrier) -> None:
+        self._body = body
+        self._barrier = barrier
+
+    def __iter__(self) -> Iterator[bytes]:
+        yield self._body[:4]
+        self._barrier.wait()
+        yield self._body[4:]
+
+
+class _GatedAsyncStream(httpx.AsyncByteStream):
+    """Send the body in two chunks and wait until every stream sent its first chunk."""
+
+    def __init__(self, body: bytes, gate: "_AsyncGate") -> None:
+        self._body = body
+        self._gate = gate
+
+    async def __aiter__(self) -> AsyncIterator[bytes]:
+        yield self._body[:4]
+        await self._gate.wait()
+        yield self._body[4:]
+
+
+class _AsyncGate:
+    def __init__(self, parties: int) -> None:
+        self._parties = parties
+        self._arrived = 0
+        self._event = asyncio.Event()
+
+    async def wait(self) -> None:
+        self._arrived += 1
+        if self._arrived == self._parties:
+            self._event.set()
+        await asyncio.wait_for(self._event.wait(), timeout=5)
+
+
+class TestConcurrentDownloadsToSamePath:
+    def test_sync(self, httpx_mock: HTTPXMock, tmp_path: Path) -> None:
+        barrier = threading.Barrier(2, timeout=5)
+        bodies = [b"AAAA-first-download", b"BBBB-second-download"]
+
+        def respond(request: httpx.Request) -> httpx.Response:
+            body = bodies[int(request.url.path.rsplit("/", 2)[-2][-1])]
+            return httpx.Response(200, stream=_GatedSyncStream(body, barrier))
+
+        httpx_mock.add_callback(respond, is_reusable=True)
+        target = tmp_path / "rooms.csv"
+
+        with HVAKRClient(access_token="test-token") as client:
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                futures = [
+                    pool.submit(client.download_file, "p1", f"f{index}", path=target)
+                    for index in range(2)
+                ]
+                results = [future.result() for future in futures]
+
+        assert results == [target, target]
+        assert target.read_bytes() in bodies
+        assert list(tmp_path.iterdir()) == [target]
+
+    async def test_async(self, httpx_mock: HTTPXMock, tmp_path: Path) -> None:
+        gate = _AsyncGate(2)
+        bodies = [b"AAAA-first-download", b"BBBB-second-download"]
+
+        def respond(request: httpx.Request) -> httpx.Response:
+            body = bodies[int(request.url.path.rsplit("/", 2)[-2][-1])]
+            return httpx.Response(200, stream=_GatedAsyncStream(body, gate))
+
+        httpx_mock.add_callback(respond, is_reusable=True)
+        target = tmp_path / "rooms.csv"
+
+        async with AsyncHVAKRClient(access_token="test-token") as client:
+            results = await asyncio.gather(
+                *(client.download_file("p1", f"f{index}", path=target) for index in range(2))
+            )
+
+        assert results == [target, target]
+        assert target.read_bytes() in bodies
+        assert list(tmp_path.iterdir()) == [target]
 
 
 def test_download_sheet_rejects_unknown_format() -> None:

@@ -156,13 +156,14 @@ identity = client.me()
 Download a sheet page as PDF or PNG, or a project file. Each method returns the
 bytes, or streams them to `path` and returns that `Path`. The file at `path` is
 replaced only after the full response arrives; on an error it is left as it was.
+The parent directory of `path` must already exist.
 Non-success responses (for example 413 when the object exceeds the server's size
 cap) raise `HVAKRClientError`.
 
 ```python
 pdf = client.download_sheet("project-id", "M-101")  # bytes
 client.download_sheet("project-id", "M-101", format="png", path="M-101.png")
-client.download_file("project-id", "file-id", path="files/rooms.csv")
+client.download_file("project-id", "file-id", path="rooms.csv")
 ```
 
 The client calls `GET /projects/{projectId}/sheets/{sheetId}/pdf`,
