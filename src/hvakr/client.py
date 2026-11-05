@@ -1,7 +1,10 @@
 """Synchronous and asynchronous clients for the HVAKR v0 API."""
 
 import logging
+import os
+import secrets
 from collections.abc import Mapping, Sequence
+from pathlib import Path
 from typing import Any, Literal, overload
 from urllib.parse import quote
 
@@ -26,7 +29,9 @@ from hvakr.schemas.project import (
     ProjectPost,
 )
 
-__version__ = "0.6.0"
+__version__ = "0.6.1"
+DEFAULT_BASE_URL = "https://api.hvakr.com"
+BASE_URL_ENV_VAR = "HVAKR_BASE_URL"
 _LOGGER = logging.getLogger(__name__)
 _WARNED_CLIENT_MESSAGES: set[str] = set()
 _ProjectSubcollectionKey = Literal[
@@ -61,6 +66,8 @@ _CalculationSection = Literal[
 _ProjectPayload = ExpandedProjectPost | ProjectPost | ExpandedProjectPatch | Mapping[str, Any]
 _JobPayload = APIJobCreate | Mapping[str, Any]
 _QueryValue = str | int | float | bool
+_SheetFormat = Literal["pdf", "png"]
+_DownloadPath = str | os.PathLike[str]
 
 
 class _ClientBase:
@@ -69,12 +76,16 @@ class _ClientBase:
     def __init__(
         self,
         access_token: str,
-        base_url: str = "https://api.hvakr.com",
+        base_url: str | None = None,
         version: str = "v0",
         timeout: float = 30.0,
     ) -> None:
         self._access_token = access_token
-        self._base_url = base_url
+        self._base_url = (
+            base_url
+            if base_url is not None
+            else os.environ.get(BASE_URL_ENV_VAR) or DEFAULT_BASE_URL
+        )
         self._version = version
         self._timeout = timeout
 
@@ -152,6 +163,48 @@ class _ClientBase:
             )
         return data
 
+    def _sheet_url(self, project_id: str, sheet_id: str, format: _SheetFormat) -> str:
+        if format not in ("pdf", "png"):
+            raise ValueError(f"Unsupported sheet format: {format!r}")
+        return self._create_url(
+            f"/projects/{self._encode_path_segment(project_id)}/sheets/"
+            f"{self._encode_path_segment(sheet_id)}/{format}"
+        )
+
+    def _file_url(self, project_id: str, file_id: str) -> str:
+        return self._create_url(
+            f"/projects/{self._encode_path_segment(project_id)}/files/"
+            f"{self._encode_path_segment(file_id)}/content"
+        )
+
+    def _check_download_response(self, response: httpx.Response) -> None:
+        """Raise for an unsuccessful byte download; the body must already be read."""
+        self._warn_if_outdated(response)
+        if response.is_success:
+            return
+        metadata: Any
+        try:
+            metadata = response.json()
+        except (ValueError, TypeError):
+            metadata = {"body": response.text}
+        raise HVAKRClientError(
+            f"Error {response.status_code}",
+            status_code=response.status_code,
+            metadata=metadata,
+        )
+
+    @staticmethod
+    def _partial_path(path: Path) -> Path:
+        """Return a temp sibling of ``path`` that is unique to one download."""
+        return path.with_name(f".{path.name}.{secrets.token_hex(8)}.part")
+
+    @staticmethod
+    def _remove_partial(partial: Path) -> None:
+        try:
+            partial.unlink()
+        except FileNotFoundError:
+            pass
+
     @staticmethod
     def _list_params(
         *,
@@ -180,7 +233,7 @@ class HVAKRClient(_ClientBase):
     def __init__(
         self,
         access_token: str,
-        base_url: str = "https://api.hvakr.com",
+        base_url: str | None = None,
         version: str = "v0",
         timeout: float = 30.0,
     ) -> None:
@@ -358,6 +411,65 @@ class HVAKRClient(_ClientBase):
         response = self._http_client.get(self._create_url("/me"), headers=self._get_auth_headers())
         return APIMe.model_validate(self._handle_response(response))
 
+    def _download(self, url: str, path: _DownloadPath | None) -> bytes | Path:
+        if path is None:
+            response = self._http_client.get(url, headers=self._get_auth_headers())
+            self._check_download_response(response)
+            return response.content
+
+        target = Path(path)
+        partial = self._partial_path(target)
+        with self._http_client.stream("GET", url, headers=self._get_auth_headers()) as response:
+            if not response.is_success:
+                response.read()
+            self._check_download_response(response)
+            try:
+                with partial.open("xb") as file:
+                    for chunk in response.iter_bytes():
+                        file.write(chunk)
+                partial.replace(target)
+            except BaseException:
+                self._remove_partial(partial)
+                raise
+        return target
+
+    @overload
+    def download_sheet(
+        self, project_id: str, sheet_id: str, *, format: _SheetFormat = ..., path: None = ...
+    ) -> bytes: ...
+
+    @overload
+    def download_sheet(
+        self, project_id: str, sheet_id: str, *, format: _SheetFormat = ..., path: _DownloadPath
+    ) -> Path: ...
+
+    def download_sheet(
+        self,
+        project_id: str,
+        sheet_id: str,
+        *,
+        format: _SheetFormat = "pdf",
+        path: _DownloadPath | None = None,
+    ) -> bytes | Path:
+        """Download a sheet page as ``pdf`` or ``png``.
+
+        Returns the bytes, or streams them to ``path`` and returns that path. ``path`` is
+        replaced only after the full response arrives.
+        """
+        return self._download(self._sheet_url(project_id, sheet_id, format), path)
+
+    @overload
+    def download_file(self, project_id: str, file_id: str, *, path: None = ...) -> bytes: ...
+
+    @overload
+    def download_file(self, project_id: str, file_id: str, *, path: _DownloadPath) -> Path: ...
+
+    def download_file(
+        self, project_id: str, file_id: str, *, path: _DownloadPath | None = None
+    ) -> bytes | Path:
+        """Download a project file. Returns the bytes, or writes them to ``path``."""
+        return self._download(self._file_url(project_id, file_id), path)
+
 
 class AsyncHVAKRClient(_ClientBase):
     """Asynchronous client for the HVAKR v0 API."""
@@ -365,7 +477,7 @@ class AsyncHVAKRClient(_ClientBase):
     def __init__(
         self,
         access_token: str,
-        base_url: str = "https://api.hvakr.com",
+        base_url: str | None = None,
         version: str = "v0",
         timeout: float = 30.0,
     ) -> None:
@@ -539,3 +651,62 @@ class AsyncHVAKRClient(_ClientBase):
             self._create_url("/me"), headers=self._get_auth_headers()
         )
         return APIMe.model_validate(self._handle_response(response))
+
+    async def _download(self, url: str, path: _DownloadPath | None) -> bytes | Path:
+        if path is None:
+            response = await self._http_client.get(url, headers=self._get_auth_headers())
+            self._check_download_response(response)
+            return response.content
+
+        target = Path(path)
+        partial = self._partial_path(target)
+        async with self._http_client.stream(
+            "GET", url, headers=self._get_auth_headers()
+        ) as response:
+            if not response.is_success:
+                await response.aread()
+            self._check_download_response(response)
+            try:
+                with partial.open("xb") as file:
+                    async for chunk in response.aiter_bytes():
+                        file.write(chunk)
+                partial.replace(target)
+            except BaseException:
+                self._remove_partial(partial)
+                raise
+        return target
+
+    @overload
+    async def download_sheet(
+        self, project_id: str, sheet_id: str, *, format: _SheetFormat = ..., path: None = ...
+    ) -> bytes: ...
+
+    @overload
+    async def download_sheet(
+        self, project_id: str, sheet_id: str, *, format: _SheetFormat = ..., path: _DownloadPath
+    ) -> Path: ...
+
+    async def download_sheet(
+        self,
+        project_id: str,
+        sheet_id: str,
+        *,
+        format: _SheetFormat = "pdf",
+        path: _DownloadPath | None = None,
+    ) -> bytes | Path:
+        """Download a sheet page as ``pdf`` or ``png``; see ``HVAKRClient.download_sheet``."""
+        return await self._download(self._sheet_url(project_id, sheet_id, format), path)
+
+    @overload
+    async def download_file(self, project_id: str, file_id: str, *, path: None = ...) -> bytes: ...
+
+    @overload
+    async def download_file(
+        self, project_id: str, file_id: str, *, path: _DownloadPath
+    ) -> Path: ...
+
+    async def download_file(
+        self, project_id: str, file_id: str, *, path: _DownloadPath | None = None
+    ) -> bytes | Path:
+        """Download a project file. Returns the bytes, or writes them to ``path``."""
+        return await self._download(self._file_url(project_id, file_id), path)

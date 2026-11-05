@@ -26,3 +26,9 @@ def skip_without_token(api_token: str | None) -> None:
     """Skip test if API token is not available."""
     if not api_token:
         pytest.skip("HVAKR_API_TOKEN not set")
+
+
+@pytest.fixture(autouse=True)
+def clear_base_url_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep a developer's HVAKR_BASE_URL from changing the default base URL in tests."""
+    monkeypatch.delenv("HVAKR_BASE_URL", raising=False)
