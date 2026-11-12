@@ -129,14 +129,32 @@ result = client.delete_project("project-id")
 
 #### get_project_calculations(project_id, include=None)
 
-Run the calculator once and retrieve selected sections. Calculation airflows,
-checksums, and equipment results are keyed by the project's equipment mode IDs.
+Run the calculator once and retrieve selected sections: `loads`,
+`register_schedule`, `graph`, `ventilation`, `equipment`, `checksums`, and
+`airflows`. Equipment results are keyed by unit graph node ID, and each one has
+a `scope` that names the system or zone the unit serves. Mode-specific results
+are keyed by the project's equipment mode IDs.
 
 ```python
 calculations = client.get_project_calculations(
     "project-id", include=["loads", "airflows", "equipment"]
 )
 cooling_airflows = calculations.airflows.project.by_mode["cooling_mode"]
+for node_id, unit in calculations.equipment.items():
+    print(node_id, unit.scope.type, unit.scope.id)
+```
+
+### Equipment on graph unit nodes
+
+Central and terminal unit equipment configuration is on the `CENTRAL_UNIT` and
+`TERMINAL_UNIT` nodes of the project graph. A unit node that is not on the plan
+has no `level` and no `point`.
+
+```python
+project = client.get_project("project-id", ["graph"])
+for node in project.graph.values():
+    if node.node_type == "CENTRAL_UNIT":
+        print(node.system_id, node.product_id, node.cost, node.components)
 ```
 
 ### Jobs, products, and identity
@@ -178,18 +196,37 @@ are not in this SDK yet:
 
 - `createSheetFile` (multipart sheet PDF upload) has no Python method.
 - `searchProducts({ type })`: `list_products` has no `type` filter.
-- The typed `expand` keys do not include `annotations`, `equipment`, `exports`,
-  or `sheetFilePages`.
+- Graph nodes of type `AIR_CLEANER`, `PUMP`, `VALVE`, and `TERMINAL_EQUIPMENT`
+  are not modeled. A graph that contains one fails validation.
 
 `download_sheet` and `download_file` have no TypeScript equivalent yet.
+
+## 0.7 migration notes
+
+SDK 0.7 matches the v0 API shapes of `@hvakr/client` 0.29.0 and later:
+
+- Equipment configuration moved from `system.equipmentConfig` and
+  `zone.equipmentConfig` to the `CENTRAL_UNIT` and `TERMINAL_UNIT` graph nodes.
+  `CentralUnitConfiguration`, `TerminalUnitConfiguration`, and `EquipmentData`
+  are removed; `EquipmentConfig` holds the shared fields. Supply duct losses are
+  in `outlet` (`ductHeatGain`, `ductLeakagePercent`).
+- `GraphNode.level` and `GraphNode.point` are `None` for an unplaced unit node.
+- `get_project_calculations` results: `equipment` entries are
+  `EquipmentSectionOutput` models with a required `scope`, and the calculated
+  graph is in `graph` (request it with `include=["graph"]`, not
+  `"dryside_graph"`).
+- `expand` keys match the API: `annotations`, `exports`, and `sheetFilePages`
+  are added. `reports`, `branchTypes`, and `pipeTypes` are removed from `expand`
+  and from the project models, because the API rejects them. `APIReport` is now
+  `APIExport`.
+- `EquipmentEfficiency` reads `coolingSEER`, `heatingCOP`, and `heatingAFUE`.
 
 ## v0.6 migration notes
 
 This SDK follows the breaking HVAKR v0.6 API:
 
-- Use `system.equipmentConfig` and `zone.equipmentConfig` instead of the legacy
-  central/terminal configuration fields. Components are ordered in `components`
-  and configured per mode in `componentConfigsByMode`.
+- Components are ordered in `components` and configured per mode in
+  `componentConfigsByMode`.
 - Use `project.equipmentModes` and mode keys such as `cooling_mode` rather than
   fixed cooling/heating output paths.
 - Replace flat space airflow fields with `designAirflowsByMode`, and place

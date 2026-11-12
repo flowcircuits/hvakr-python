@@ -5,22 +5,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-from hvakr.schemas.common import Point, Size
-from hvakr.schemas.graph import (
-    DuctSize,
-    FlowType,
-    NodeType,
-    RegisterPlacementType,
-    Selection,
-)
-
-
-class APIOutputType(str, Enum):
-    """Type of project output."""
-
-    DRYSIDE_GRAPH = "dryside_graph"
-    REGISTER_SCHEDULE = "register_schedule"
-    LOADS = "loads"
+from hvakr.schemas.equipment import EquipmentProjectScope
+from hvakr.schemas.graph import DuctSize, FlowType, NodeData
 
 
 class RegisterModelType(str, Enum):
@@ -227,43 +213,8 @@ class APIProjectOutputRegisterSchedule(BaseModel):
     model_config = {"populate_by_name": True}
 
 
-# Dry side graph schemas
-class MetaDrySideNodeData(BaseModel):
-    """Node data with pressure information."""
-
-    # Coordinate data
-    level: int
-    point: Point
-    # Pressure
-    pressure: float | None = None
-    # Node type and specific data
-    node_type: NodeType = Field(alias="nodeType")
-    # Register fields
-    flow_rate: float | None = Field(default=None, alias="flowRate")
-    flow_type: FlowType | None = Field(default=None, alias="flowType")
-    placement_type: RegisterPlacementType | None = Field(default=None, alias="placementType")
-    pressure_loss: float | None = Field(default=None, alias="pressureLoss")
-    size: Size | None = None
-    tag: str | None = None
-    throw: float | None = None
-    rotation: float | None = None
-    space_ids: list[str] | None = Field(default=None, alias="spaceIds")
-    # Fitting fields
-    custom_loss_coefficients: dict[str, float] | None = Field(
-        default=None, alias="customLossCoefficients"
-    )
-    custom_pressure_losses: dict[str, float] | None = Field(
-        default=None, alias="customPressureLosses"
-    )
-    # Terminal/Central unit fields
-    selections: dict[str, Selection] | None = None
-    zone_id: str | None = Field(default=None, alias="zoneId")
-    system_id: str | None = Field(default=None, alias="systemId")
-
-    model_config = {"populate_by_name": True}
-
-
-class MetaDrySideDuctAdjacency(BaseModel):
+# Calculated graph schemas
+class MetaGraphDuctAdjacency(BaseModel):
     """Duct adjacency with flow rate."""
 
     id: str
@@ -275,7 +226,7 @@ class MetaDrySideDuctAdjacency(BaseModel):
     model_config = {"populate_by_name": True}
 
 
-class MetaDrySideLinkAdjacency(BaseModel):
+class MetaGraphLinkAdjacency(BaseModel):
     """Link adjacency."""
 
     id: str
@@ -284,52 +235,18 @@ class MetaDrySideLinkAdjacency(BaseModel):
     model_config = {"populate_by_name": True}
 
 
-MetaDrySideAdjacencyData = MetaDrySideDuctAdjacency | MetaDrySideLinkAdjacency
+MetaGraphAdjacencyData = MetaGraphDuctAdjacency | MetaGraphLinkAdjacency
 
 
-class MetaDrySideGraphNode(BaseModel):
-    """A node in the dry side graph with metadata."""
+class MetaGraphNode(NodeData):
+    """A graph node annotated with its calculated pressure."""
 
-    adjacencies: list[MetaDrySideDuctAdjacency | MetaDrySideLinkAdjacency]
     id: str
-    # Node data
-    level: int
-    point: Point
+    adjacencies: list[MetaGraphAdjacencyData]
     pressure: float | None = None
-    node_type: NodeType = Field(alias="nodeType")
-    # Additional node-specific fields
-    flow_rate: float | None = Field(default=None, alias="flowRate")
-    flow_type: FlowType | None = Field(default=None, alias="flowType")
-    placement_type: RegisterPlacementType | None = Field(default=None, alias="placementType")
-    pressure_loss: float | None = Field(default=None, alias="pressureLoss")
-    size: Size | None = None
-    tag: str | None = None
-    throw: float | None = None
-    rotation: float | None = None
-    space_ids: list[str] | None = Field(default=None, alias="spaceIds")
-    custom_loss_coefficients: dict[str, float] | None = Field(
-        default=None, alias="customLossCoefficients"
-    )
-    custom_pressure_losses: dict[str, float] | None = Field(
-        default=None, alias="customPressureLosses"
-    )
-    selections: dict[str, Selection] | None = None
-    zone_id: str | None = Field(default=None, alias="zoneId")
-    system_id: str | None = Field(default=None, alias="systemId")
-
-    model_config = {"populate_by_name": True}
 
 
-MetaDrySideGraph = dict[str, MetaDrySideGraphNode]
-
-
-class APIProjectOutputDrySideGraph(BaseModel):
-    """API response for dry side graph output."""
-
-    dryside_graph: MetaDrySideGraph = Field(alias="drySideGraph")
-    errors: list[ErrorInfo]
-
-    model_config = {"populate_by_name": True}
+MetaGraph = dict[str, MetaGraphNode]
 
 
 # Unified calculation response schemas (v0.4+)
@@ -423,12 +340,24 @@ class CalcAirflowsSection(BaseModel):
     zones: dict[str, ProjectScopeAirflows]
 
 
+class EquipmentSectionOutput(BaseModel):
+    """Calculated outputs for one central or terminal unit.
+
+    ``airflows`` and ``modes`` keep the component pipeline data verbatim:
+    pipeline components are extensible and are keyed by project-defined mode
+    and component ids.
+    """
+
+    scope: EquipmentProjectScope
+    airflows: dict[str, Any] | None = None
+    modes: dict[str, dict[str, Any]] | None = None
+
+
 class APIProjectCalculations(BaseModel):
     """Response from ``GET /projects/{id}/calculations``.
 
-    ``equipment`` intentionally preserves component pipeline data verbatim:
-    pipeline components are extensible and are keyed by project-defined mode
-    and component ids.
+    ``equipment`` is keyed by unit graph node ID. Each entry's ``scope`` names
+    the system or zone the unit serves.
     """
 
     errors: list[ErrorInfo]
@@ -437,9 +366,9 @@ class APIProjectCalculations(BaseModel):
     register_schedule: list[SpaceRegisterScheduleRow] | None = Field(
         default=None, alias="registerSchedule"
     )
-    dry_side_graph: MetaDrySideGraph | None = Field(default=None, alias="drySideGraph")
+    graph: MetaGraph | None = None
     ventilation: CalcVentilationSection | None = None
-    equipment: dict[str, dict[str, Any]] | None = None
+    equipment: dict[str, EquipmentSectionOutput] | None = None
     checksums: CalcChecksumsSection | None = None
     airflows: CalcAirflowsSection | None = None
 

@@ -28,6 +28,7 @@ Example:
 from hvakr.client import AsyncHVAKRClient, HVAKRClient
 from hvakr.exceptions import HVAKRClientError
 from hvakr.schemas import (
+    APIExport,
     APIJob,
     APIJobCreate,
     APIMe,
@@ -37,7 +38,6 @@ from hvakr.schemas import (
     APIMeUser,
     APIProduct,
     APIProjectCalculations,
-    APIReport,
     Box,
     DisplayUnitSystemId,
     ExpandedProject,
@@ -65,7 +65,7 @@ from hvakr.schemas import (
 )
 from hvakr.webhooks import HVAKRWebhookError, construct_webhook_event
 
-__version__ = "0.6.1"
+__version__ = "0.7.0"
 
 __all__ = [
     # Client classes
@@ -99,8 +99,8 @@ __all__ = [
     "APIMeRateLimit",
     "APIMeUser",
     "APIProduct",
+    "APIExport",
     "APIProjectCalculations",
-    "APIReport",
     # Project schemas
     "ExpandedProject",
     "ExpandedProjectPatch",

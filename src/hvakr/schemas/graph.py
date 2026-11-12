@@ -3,9 +3,10 @@
 from enum import Enum
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from hvakr.schemas.common import Point, Size
+from hvakr.schemas.equipment import EquipmentConfig
 
 
 class FlowType(str, Enum):
@@ -127,28 +128,30 @@ class Selection(BaseModel):
     model_config = {"populate_by_name": True}
 
 
-class TerminalUnitNodeData(BaseModel):
-    """Data for terminal unit nodes."""
+class TerminalUnitNodeData(EquipmentConfig):
+    """Data for terminal unit nodes, including their equipment configuration."""
 
     node_type: Literal["TERMINAL_UNIT"] = Field(alias="nodeType")
-    pressure_loss: float | None = Field(default=None, alias="pressureLoss")
     rotation: float | None = None
+    width: float | None = None
+    height: float | None = None
+    product_id: str | None = Field(default=None, alias="productId")
+    cost: float | None = Field(default=None, ge=0)
     selections: dict[str, Selection] | None = None
     zone_id: str = Field(alias="zoneId")
 
-    model_config = {"populate_by_name": True}
 
-
-class CentralUnitNodeData(BaseModel):
-    """Data for central unit nodes."""
+class CentralUnitNodeData(EquipmentConfig):
+    """Data for central unit nodes, including their equipment configuration."""
 
     node_type: Literal["CENTRAL_UNIT"] = Field(alias="nodeType")
-    pressure_loss: float | None = Field(default=None, alias="pressureLoss")
     rotation: float | None = None
+    width: float | None = None
+    height: float | None = None
+    product_id: str | None = Field(default=None, alias="productId")
+    cost: float | None = Field(default=None, ge=0)
     selections: dict[str, Selection] | None = None
     system_id: str = Field(alias="systemId")
-
-    model_config = {"populate_by_name": True}
 
 
 class PortalNodeData(BaseModel):
@@ -214,33 +217,30 @@ class GraphAdjacency(BaseModel):
     model_config = {"populate_by_name": True}
 
 
-class NodeData(BaseModel):
-    """Combined node data with coordinates."""
+class NodeData(EquipmentConfig):
+    """Fields of every node type in one model; ``node_type`` says which apply.
 
-    level: int
-    point: Point
-    # Node type and specific data handled via union in GraphNode
+    The equipment configuration fields apply to central and terminal unit
+    nodes. A unit node can be unplaced: it omits both ``level`` and ``point``.
+    Every other node type has both.
+    """
 
-
-class GraphNode(BaseModel):
-    """A node in the HVAC graph."""
-
-    id: str
-    adjacencies: list[GraphAdjacency]
-    level: int
-    point: Point
-    # Node-specific fields
+    level: int | None = None
+    point: Point | None = None
     node_type: NodeType = Field(alias="nodeType")
     # Register fields
     flow_rate: float | None = Field(default=None, alias="flowRate")
     flow_type: FlowType | None = Field(default=None, alias="flowType")
     placement_type: RegisterPlacementType | None = Field(default=None, alias="placementType")
-    pressure_loss: float | None = Field(default=None, alias="pressureLoss")
     size: Size | None = None
     tag: str | None = None
     throw: float | None = None
-    rotation: float | None = None
     space_ids: list[str] | None = Field(default=None, alias="spaceIds")
+    # Register and unit fields
+    rotation: float | None = None
+    width: float | None = None
+    height: float | None = None
+    product_id: str | None = Field(default=None, alias="productId")
     # Fitting fields
     custom_loss_coefficients: dict[str, float] | None = Field(
         default=None, alias="customLossCoefficients"
@@ -249,11 +249,29 @@ class GraphNode(BaseModel):
         default=None, alias="customPressureLosses"
     )
     # Terminal/Central unit fields
+    cost: float | None = Field(default=None, ge=0)
     selections: dict[str, Selection] | None = None
     zone_id: str | None = Field(default=None, alias="zoneId")
     system_id: str | None = Field(default=None, alias="systemId")
 
-    model_config = {"populate_by_name": True}
+    @model_validator(mode="after")
+    def check_placement(self) -> "NodeData":
+        """Only unit nodes can be unplaced, and only with both coordinates omitted."""
+        if (self.level is None) != (self.point is None):
+            raise ValueError("level and point must both be set or both be omitted")
+        if self.level is None and self.node_type not in (
+            NodeType.CENTRAL_UNIT,
+            NodeType.TERMINAL_UNIT,
+        ):
+            raise ValueError(f"{self.node_type.value} nodes need level and point")
+        return self
+
+
+class GraphNode(NodeData):
+    """A node in the HVAC graph."""
+
+    id: str
+    adjacencies: list[GraphAdjacency]
 
 
 Graph = dict[str, GraphNode]

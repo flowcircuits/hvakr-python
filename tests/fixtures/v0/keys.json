@@ -1,0 +1,34 @@
+{
+    "clientVersion": "0.31.0",
+    "value": {
+        "expandKeys": [
+            "annotations",
+            "deadlines",
+            "doorTypes",
+            "ductTypes",
+            "exports",
+            "graph",
+            "registerTypes",
+            "roofTypes",
+            "sheetFilePages",
+            "sheetFiles",
+            "sheets",
+            "slabTypes",
+            "spaceTypes",
+            "spaces",
+            "systems",
+            "wallTypes",
+            "windowTypes",
+            "zones"
+        ],
+        "calculationSections": [
+            "loads",
+            "register_schedule",
+            "graph",
+            "ventilation",
+            "equipment",
+            "checksums",
+            "airflows"
+        ]
+    }
+}

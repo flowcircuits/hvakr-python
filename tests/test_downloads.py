@@ -71,7 +71,7 @@ class TestSyncDownloads:
         assert data == PDF_BYTES
         assert request.method == "GET"
         assert request.headers["Authorization"] == "Bearer test-token"
-        assert request.headers["X-HVAKR-Client"] == "hvakr-python/0.6.1"
+        assert request.headers["X-HVAKR-Client"] == "hvakr-python/0.7.0"
 
     def test_download_sheet_png(self, httpx_mock: HTTPXMock) -> None:
         httpx_mock.add_response(
