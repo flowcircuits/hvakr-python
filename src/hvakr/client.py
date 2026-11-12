@@ -29,20 +29,21 @@ from hvakr.schemas.project import (
     ProjectPost,
 )
 
-__version__ = "0.6.1"
+__version__ = "0.7.0"
 DEFAULT_BASE_URL = "https://api.hvakr.com"
 BASE_URL_ENV_VAR = "HVAKR_BASE_URL"
 _LOGGER = logging.getLogger(__name__)
 _WARNED_CLIENT_MESSAGES: set[str] = set()
 _ProjectSubcollectionKey = Literal[
-    "branchTypes",
+    "annotations",
     "deadlines",
     "doorTypes",
     "ductTypes",
+    "exports",
     "graph",
-    "pipeTypes",
     "registerTypes",
     "roofTypes",
+    "sheetFilePages",
     "sheetFiles",
     "sheets",
     "slabTypes",
@@ -52,12 +53,11 @@ _ProjectSubcollectionKey = Literal[
     "wallTypes",
     "windowTypes",
     "zones",
-    "reports",
 ]
 _CalculationSection = Literal[
     "loads",
     "register_schedule",
-    "dryside_graph",
+    "graph",
     "ventilation",
     "equipment",
     "checksums",

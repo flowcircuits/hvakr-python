@@ -1,0 +1,190 @@
+{
+    "clientVersion": "0.31.0",
+    "value": {
+        "unit-ahu-1": {
+            "id": "unit-ahu-1",
+            "nodeType": "CENTRAL_UNIT",
+            "systemId": "system-1",
+            "level": 1,
+            "point": {
+                "x": 120,
+                "y": 48
+            },
+            "rotation": 90,
+            "width": 144,
+            "height": 72,
+            "productId": "product-rtu",
+            "cost": 42000,
+            "selections": {
+                "heater-1": {
+                    "productId": "product-heater",
+                    "quantity": 1,
+                    "leavingAirTemp": 95
+                }
+            },
+            "components": [
+                {
+                    "id": "OA",
+                    "type": "OUTSIDE_AIR_INTAKE"
+                },
+                {
+                    "id": "CC",
+                    "type": "COOLING_COIL"
+                },
+                {
+                    "id": "HC",
+                    "type": "HEATING_COIL"
+                },
+                {
+                    "id": "INEFF",
+                    "type": "EQUIPMENT_INEFFICIENCY"
+                }
+            ],
+            "componentConfigsByMode": {
+                "cooling_mode": {
+                    "OA": {
+                        "enabled": true,
+                        "configuration": {
+                            "componentType": "OUTSIDE_AIR_INTAKE",
+                            "method": "PERCENT",
+                            "percentage": 0.2
+                        }
+                    },
+                    "CC": {
+                        "enabled": true,
+                        "configuration": {
+                            "componentType": "COOLING_COIL",
+                            "targetTemperature": 55,
+                            "type": 0,
+                            "waterDeltaT": 10
+                        }
+                    },
+                    "HC": {
+                        "enabled": false,
+                        "configuration": {
+                            "componentType": "HEATING_COIL",
+                            "type": 2
+                        }
+                    },
+                    "INEFF": {
+                        "enabled": true,
+                        "configuration": {
+                            "componentType": "EQUIPMENT_INEFFICIENCY",
+                            "sensibleHeatGain": {
+                                "type": "POWER",
+                                "power": 1500
+                            }
+                        }
+                    }
+                }
+            },
+            "miscInefficiencies": 0.01,
+            "pressureLoss": 0.5,
+            "outlet": {
+                "ductHeatGain": 2,
+                "ductLeakagePercent": 0.01
+            },
+            "energyConfiguration": {
+                "schedule": {
+                    "occupiedHours": [
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        1,
+                        1,
+                        1,
+                        1,
+                        1,
+                        1,
+                        1,
+                        1,
+                        1,
+                        1,
+                        1,
+                        1,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0
+                    ],
+                    "warmupHours": 2,
+                    "warmupMultiplier": 1.5
+                },
+                "efficiency": {
+                    "heatingType": "heatPump",
+                    "coolingSEER": 14,
+                    "heatingCOP": 3.2,
+                    "heatingAFUE": 0.8
+                }
+            },
+            "adjacencies": [
+                {
+                    "id": "register-1",
+                    "adjacencyType": "DUCT",
+                    "ductTypeId": "duct-type-1"
+                }
+            ]
+        },
+        "unit-vav-1": {
+            "id": "unit-vav-1",
+            "nodeType": "TERMINAL_UNIT",
+            "zoneId": "zone-1",
+            "productId": "product-vav",
+            "cost": 0,
+            "components": [
+                {
+                    "id": "HC",
+                    "type": "HEATING_COIL"
+                }
+            ],
+            "componentConfigsByMode": {
+                "heating_mode": {
+                    "HC": {
+                        "enabled": true,
+                        "configuration": {
+                            "componentType": "HEATING_COIL",
+                            "targetTemperature": 90,
+                            "type": 3
+                        }
+                    }
+                }
+            },
+            "inletData": {
+                "enabled": true,
+                "configuration": {
+                    "componentType": "EQUIPMENT_INLET",
+                    "decoupled": false,
+                    "method": "CUSTOM",
+                    "flowRate": 250
+                }
+            },
+            "adjacencies": []
+        },
+        "register-1": {
+            "id": "register-1",
+            "nodeType": "REGISTER",
+            "level": 1,
+            "point": {
+                "x": 10,
+                "y": 20
+            },
+            "flowType": "SUPPLY",
+            "placementType": "CEILING",
+            "flowRate": 200,
+            "spaceIds": [
+                "space-1"
+            ],
+            "adjacencies": [
+                {
+                    "id": "unit-ahu-1",
+                    "adjacencyType": "DUCT"
+                }
+            ]
+        }
+    }
+}

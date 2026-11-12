@@ -6,11 +6,11 @@ from pytest_httpx import HTTPXMock
 from hvakr import APIProjectCalculations, AsyncHVAKRClient, HVAKRClient, HVAKRClientError, Project
 from hvakr.schemas import (
     APIJob,
+    EquipmentConfig,
     EquipmentInletMethod,
     EquipmentMode,
     LoadCondition,
     SpaceData,
-    TerminalUnitConfiguration,
 )
 
 DEFAULT_EQUIPMENT_MODES = {
@@ -43,7 +43,7 @@ class TestHVAKRClient:
         client = HVAKRClient(access_token="my-secret-token")
         assert client._get_auth_headers() == {
             "Authorization": "Bearer my-secret-token",
-            "X-HVAKR-Client": "hvakr-python/0.6.1",
+            "X-HVAKR-Client": "hvakr-python/0.7.0",
         }
 
     def test_list_projects_is_paginated_and_filterable(self, httpx_mock: HTTPXMock) -> None:
@@ -117,12 +117,16 @@ class TestHVAKRClient:
         request = httpx_mock.get_requests()[0]
         assert result == {"id": "new-project"}
         assert request.headers["Idempotency-Key"] == "create-1"
-        assert request.headers["X-HVAKR-Client"] == "hvakr-python/0.6.1"
+        assert request.headers["X-HVAKR-Client"] == "hvakr-python/0.7.0"
 
     def test_get_project_calculations_selects_sections(self, httpx_mock: HTTPXMock) -> None:
         httpx_mock.add_response(
             url="https://api.hvakr.com/v0/projects/project-123/calculations?include=airflows%2Cequipment",
-            json={"errors": [], "flags": {}, "equipment": {"system-1": {"modes": {}}}},
+            json={
+                "errors": [],
+                "flags": {},
+                "equipment": {"unit-1": {"scope": {"type": "system", "id": "system-1"}}},
+            },
         )
 
         with HVAKRClient(access_token="test-token") as client:
@@ -131,7 +135,8 @@ class TestHVAKRClient:
             )
 
         assert isinstance(result, APIProjectCalculations)
-        assert result.equipment == {"system-1": {"modes": {}}}
+        assert result.equipment is not None
+        assert result.equipment["unit-1"].scope.id == "system-1"
 
     def test_job_product_and_me_endpoints(self, httpx_mock: HTTPXMock) -> None:
         httpx_mock.add_response(
@@ -290,14 +295,14 @@ class TestSchemaValidation:
         assert calculations.register_schedule is not None
         assert calculations.register_schedule[0].model_type.value == "sidewall"
 
-    def test_equipment_mode_and_terminal_config_round_trip(self) -> None:
+    def test_equipment_mode_and_equipment_config_round_trip(self) -> None:
         mode = EquipmentMode(
             id="cooling_mode",
             loadCondition="COOLING",
             name="Cooling",
             description="",
         )
-        config = TerminalUnitConfiguration.model_validate(
+        config = EquipmentConfig.model_validate(
             {
                 "components": [{"id": "coil", "type": "COOLING_COIL"}],
                 "componentConfigsByMode": {
@@ -319,7 +324,7 @@ class TestSchemaValidation:
         assert component.configuration.target_temperature == 55
 
     def test_equipment_inlet_custom_method_uses_inlet_enum(self) -> None:
-        config = TerminalUnitConfiguration.model_validate(
+        config = EquipmentConfig.model_validate(
             {
                 "inletData": {
                     "enabled": True,

@@ -1,0 +1,88 @@
+{
+    "clientVersion": "0.31.0",
+    "value": {
+        "annotations": {
+            "annotation-1": {
+                "x": 10,
+                "y": 20,
+                "arrowX": 30,
+                "arrowY": 40,
+                "text": "Verify duct size",
+                "width": 120,
+                "author": "user-1",
+                "level": 1,
+                "color": "#ff0000",
+                "size": "medium",
+                "align": "center",
+                "shape": "cloud"
+            }
+        },
+        "exports": {
+            "export-1": {
+                "id": "export-1",
+                "name": "Load Calculation",
+                "status": "completed",
+                "downloadUrl": "https://example.com/export.pdf",
+                "date": 1762300800000,
+                "outputFileType": "PDF",
+                "progress": 1,
+                "studyId": "study-1",
+                "studyName": "Option B"
+            }
+        },
+        "sheetFilePages": {
+            "page-1": {
+                "aiProcessing": {
+                    "status": "COMPLETE",
+                    "results": {
+                        "scale": {
+                            "result": 48,
+                            "confidence": 0.9
+                        }
+                    }
+                },
+                "customScaleInfo": {
+                    "leftScale": 1,
+                    "leftUnit": "IN",
+                    "rightScale": 4,
+                    "rightUnit": "FT"
+                },
+                "defaultCeilingHeight": 108,
+                "defaultSlabHeight": 144,
+                "pageNumber": 1,
+                "pdfUrl": "https://example.com/page-1.pdf",
+                "png": {
+                    "standard": {
+                        "status": "COMPLETE",
+                        "height": 1700,
+                        "width": 2200,
+                        "resolution": 150,
+                        "url": "https://example.com/page-1.png"
+                    },
+                    "thumbnail": {
+                        "status": "PENDING"
+                    }
+                },
+                "scale": 48,
+                "sheetFileId": "sheet-file-1",
+                "sheetNumber": "M-101",
+                "sourceFileName": "mechanical.pdf",
+                "createdAt": 1762300800000,
+                "title": "First Floor Mechanical Plan"
+            }
+        },
+        "systems": {
+            "system-1": {
+                "name": "AHU-1",
+                "color": "#8a8a8a",
+                "configured": true
+            }
+        },
+        "zones": {
+            "zone-1": {
+                "name": "VAV-1",
+                "systemId": "system-1"
+            }
+        }
+    }
+}

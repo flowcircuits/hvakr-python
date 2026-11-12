@@ -3,7 +3,7 @@
 from enum import Enum
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field
 
 from hvakr.schemas.common import Box, DisplayUnitSystemId, Point, Rect, Size
 from hvakr.schemas.graph import DuctSize, FlowType, Graph, RegisterPlacementType
@@ -76,59 +76,11 @@ class EdgeExposure(str, Enum):
     W = "W"
 
 
-class OutsideAirMethod(str, Enum):
-    """Method for calculating outside air."""
-
-    SUM_OF_SPACES = "SUM_OF_SPACES"
-    PERCENT = "PERCENT"
-    CUSTOM = "CUSTOM"
-    MULTI_ZONE = "MULTI_ZONE"
-
-
 class LoadCondition(str, Enum):
     """The design condition represented by an equipment mode."""
 
     COOLING = "COOLING"
     HEATING = "HEATING"
-
-
-class EquipmentComponentType(str, Enum):
-    """Component types supported by a modular equipment configuration."""
-
-    OUTSIDE_AIR_INTAKE = "OUTSIDE_AIR_INTAKE"
-    ENERGY_RECOVERY_UNIT = "ENERGY_RECOVERY_UNIT"
-    RETURN_AIR_INTAKE = "RETURN_AIR_INTAKE"
-    COOLING_COIL = "COOLING_COIL"
-    HEATING_COIL = "HEATING_COIL"
-    EQUIPMENT_INEFFICIENCY = "EQUIPMENT_INEFFICIENCY"
-    HUMIDIFIER = "HUMIDIFIER"
-    DEHUMIDIFIER = "DEHUMIDIFIER"
-    EQUIPMENT_INLET = "EQUIPMENT_INLET"
-    EQUIPMENT_OUTLET = "EQUIPMENT_OUTLET"
-
-
-class EquipmentInletMethod(str, Enum):
-    """Methods for configuring a terminal unit's upstream inlet airflow."""
-
-    SUM_OF_SPACES_OA = "SUM_OF_SPACES_OA"
-    PERCENT_SUPPLY = "PERCENT_SUPPLY"
-    CUSTOM = "CUSTOM"
-
-
-class CoolingCoilType(int, Enum):
-    """Type of cooling coil."""
-
-    WATER = 0
-    EXPANSION = 1
-
-
-class HeatingCoilType(int, Enum):
-    """Type of heating coil."""
-
-    WATER = 0
-    EXPANSION = 1
-    GAS = 2
-    ELECTRIC = 3
 
 
 class FittingType(str, Enum):
@@ -153,31 +105,12 @@ class WyeType(str, Enum):
     CONVERGENT = "CONVERGENT"
 
 
-class TerminalUnitInletSize(str, Enum):
-    """Terminal unit inlet size."""
-
-    SIZE_6 = "6"
-    SIZE_8 = "8"
-    SIZE_10 = "10"
-    SIZE_12 = "12"
-    SIZE_14 = "14"
-    SIZE_16 = "16"
-    SIZE_24X16 = "24x16"
-
-
 class TerminalUnitOutsideAirMethod(int, Enum):
     """Method for terminal unit outside air calculation."""
 
     SUM_OF_SPACES = 0
     PERCENT = 1
     CUSTOM = 2
-
-
-class PipeMaterialType(str, Enum):
-    """Pipe material type."""
-
-    STEEL = "STEEL"
-    COPPER = "COPPER"
 
 
 class DefaultRegisterType(str, Enum):
@@ -188,13 +121,23 @@ class DefaultRegisterType(str, Enum):
     SMALL = "SMALL"
 
 
-class ReportFileType(str, Enum):
-    """Report output file type."""
+class ExportFileType(str, Enum):
+    """Export output file type."""
 
     PDF = "PDF"
     CSV = "CSV"
     DOCX = "DOCX"
     ZIP = "ZIP"
+    XML = "XML"
+    JSON = "JSON"
+    XLSX = "XLSX"
+    PNG = "PNG"
+    JPG = "JPG"
+    SVG = "SVG"
+    DXF = "DXF"
+    TXT = "TXT"
+    MD = "MD"
+    HTML = "HTML"
 
 
 class LengthUnit(str, Enum):
@@ -620,81 +563,6 @@ class SpaceAirflowRequirements(BaseModel):
     model_config = {"populate_by_name": True}
 
 
-class EquipmentComponent(BaseModel):
-    """A component in the ordered equipment pipeline."""
-
-    id: str
-    type: EquipmentComponentType
-
-
-class EquipmentComponentConfiguration(BaseModel):
-    """Configuration for one component in one operating mode.
-
-    The component type determines which optional fields apply. Keeping the
-    shared wire fields together mirrors the API's component registry while
-    retaining an extensible model for newly introduced components.
-    """
-
-    component_type: EquipmentComponentType = Field(alias="componentType")
-    method: OutsideAirMethod | EquipmentInletMethod | None = None
-    percentage: float | None = None
-    flow_rate: float | None = Field(default=None, alias="flowRate")
-    duct_heat_gain: float | None = Field(default=None, alias="ductHeatGain")
-    duct_leakage_percent: float | None = Field(default=None, alias="ductLeakagePercent")
-    erv_wheel_effectiveness: float | None = Field(default=None, alias="ervWheelEffectiveness")
-    relief_enabled: bool | None = Field(default=None, alias="reliefEnabled")
-    target_temperature: float | None = Field(default=None, alias="targetTemperature")
-    type: int | None = None
-    water_delta_t: float | None = Field(default=None, alias="waterDeltaT")
-    sensible_heat_gain: dict[str, Any] | None = Field(default=None, alias="sensibleHeatGain")
-    decoupled: bool | None = None
-
-    model_config = {"populate_by_name": True, "extra": "allow"}
-
-    @model_validator(mode="before")
-    @classmethod
-    def resolve_method_for_component_type(cls, data: Any) -> Any:
-        """Use the component type to disambiguate overlapping method values."""
-        if not isinstance(data, dict) or data.get("method") is None:
-            return data
-
-        component_type = data.get("componentType", data.get("component_type"))
-        if component_type == EquipmentComponentType.EQUIPMENT_INLET:
-            data = data.copy()
-            data["method"] = EquipmentInletMethod(data["method"])
-        return data
-
-
-class ComponentConfiguration(BaseModel):
-    """Enabled state and configuration of a component for a single mode."""
-
-    enabled: bool
-    configuration: EquipmentComponentConfiguration
-
-
-class EquipmentInletData(BaseModel):
-    """Terminal-unit inlet configuration shared by all modes."""
-
-    enabled: bool
-    configuration: EquipmentComponentConfiguration
-
-
-class EquipmentData(BaseModel):
-    """Shared modular equipment configuration for central and terminal units."""
-
-    components: list[EquipmentComponent] | None = None
-    component_configs_by_mode: dict[str, dict[str, ComponentConfiguration]] | None = Field(
-        default=None, alias="componentConfigsByMode"
-    )
-    duct_heat_gain: float | None = Field(default=None, alias="ductHeatGain")
-    duct_leakage_percent: float | None = Field(default=None, alias="ductLeakagePercent")
-    misc_inefficiencies: float | None = Field(default=None, alias="miscInefficiencies")
-    pressure_loss: float | None = Field(default=None, alias="pressureLoss")
-    inlet_data: EquipmentInletData | None = Field(default=None, alias="inletData")
-
-    model_config = {"populate_by_name": True}
-
-
 class DiversityData(BaseModel):
     """Diversity data."""
 
@@ -703,56 +571,9 @@ class DiversityData(BaseModel):
     occupancy: float | None = None
 
 
-class CentralUnitDimensionData(BaseModel):
-    """Central unit dimension data."""
-
-    length: float | None = None
-    width: float | None = None
-
-
-class EnergySchedule(BaseModel):
-    """Operating schedule used for central-unit energy calculations."""
-
-    occupied_hours: dict[str, Any] | None = Field(default=None, alias="occupiedHours")
-    warmup_hours: float | None = Field(default=None, alias="warmupHours")
-    warmup_multiplier: float | None = Field(default=None, alias="warmupMultiplier")
-
-    model_config = {"populate_by_name": True}
-
-
-class EquipmentEfficiency(BaseModel):
-    """Central-unit heating and cooling efficiency inputs."""
-
-    heating_type: Literal["heatPump", "gasFurnace"] | None = Field(
-        default=None, alias="heatingType"
-    )
-    cooling_seer: float | None = Field(default=None, alias="coolingSeer")
-    heating_cop: float | None = Field(default=None, alias="heatingCop")
-    heating_afue: float | None = Field(default=None, alias="heatingAfue")
-
-    model_config = {"populate_by_name": True}
-
-
-class EnergyConfiguration(BaseModel):
-    """Energy configuration attached to a central equipment configuration."""
-
-    schedule: EnergySchedule | None = None
-    efficiency: EquipmentEfficiency | None = None
-
-
-class CentralUnitConfiguration(EquipmentData):
-    """Modular central-unit equipment configuration."""
-
-    dimension_data: CentralUnitDimensionData | None = Field(default=None, alias="dimensionData")
-    energy_configuration: EnergyConfiguration | None = Field(
-        default=None, alias="energyConfiguration"
-    )
-
-
 class SystemData(BaseModel):
     """System data."""
 
-    equipment_config: CentralUnitConfiguration | None = Field(default=None, alias="equipmentConfig")
     color: str | None = None
     configured: bool | None = None
     diversity_data: DiversityData | None = Field(default=None, alias="diversityData")
@@ -761,29 +582,11 @@ class SystemData(BaseModel):
     model_config = {"populate_by_name": True}
 
 
-# Terminal unit / Zone configuration
-class TerminalUnitDimensionData(BaseModel):
-    """Terminal unit dimension data."""
-
-    inlet_size: TerminalUnitInletSize | None = Field(default=None, alias="inletSize")
-
-    model_config = {"populate_by_name": True}
-
-
-class TerminalUnitConfiguration(EquipmentData):
-    """Modular terminal-unit equipment configuration."""
-
-    dimension_data: TerminalUnitDimensionData | None = Field(default=None, alias="dimensionData")
-
-
 class ZoneData(BaseModel):
     """Zone data."""
 
     color: str | None = None
     configured: bool | None = None
-    equipment_config: TerminalUnitConfiguration | None = Field(
-        default=None, alias="equipmentConfig"
-    )
     name: str | None = None
     system_id: str | None = Field(default=None, alias="systemId")
 
@@ -791,15 +594,6 @@ class ZoneData(BaseModel):
 
 
 # Type data models
-class BranchTypeData(BaseModel):
-    """Branch type data."""
-
-    loss_coefficient: float | None = Field(default=None, alias="lossCoefficient")
-    name: str | None = None
-
-    model_config = {"populate_by_name": True}
-
-
 class DeadlineData(BaseModel):
     """Deadline data."""
 
@@ -836,18 +630,6 @@ class DuctTypeData(BaseModel):
     model_config = {"populate_by_name": True}
 
 
-class PipeTypeData(BaseModel):
-    """Pipe type data."""
-
-    insulation: float | None = None
-    material: PipeMaterialType | None = None
-    max_pressure_drop_rate: float | None = Field(default=None, alias="maxPressureDropRate")
-    max_velocity: float | None = Field(default=None, alias="maxVelocity")
-    name: str | None = None
-
-    model_config = {"populate_by_name": True}
-
-
 class RegisterSpecConstraints(BaseModel):
     """Constraints applied to a register specification."""
 
@@ -879,51 +661,41 @@ class RegisterTypeData(BaseModel):
     model_config = {"populate_by_name": True}
 
 
-class ReportTemplateOption(BaseModel):
-    """A configurable option on a report template."""
+class AnnotationData(BaseModel):
+    """A text annotation on a level of the plan."""
 
-    id: str
-    label: str
-    type: Literal["checkbox", "select"]
-    value: bool | str
-    options: dict[str, str] | None = None
-
-
-class ReportTemplate(BaseModel):
-    """A report template definition."""
-
-    file_type: ReportFileType = Field(alias="fileType")
-    id: str
-    name: str
-    options: dict[str, ReportTemplateOption] | None = None
+    x: float
+    y: float
+    arrow_x: float | None = Field(default=None, alias="arrowX")
+    arrow_y: float | None = Field(default=None, alias="arrowY")
+    text: str
+    width: float | None = Field(default=None, gt=0)
+    author: str
+    level: float
+    color: str | None = None
+    size: Literal["small", "medium", "large"] | None = None
+    align: Literal["left", "center", "right"] | None = None
+    shape: Literal["none", "box", "cloud", "hexagon"] | None = None
 
     model_config = {"populate_by_name": True}
 
 
-class APIReport(BaseModel):
-    """Public report projection returned by an expanded project."""
+class APIExport(BaseModel):
+    """A generated or in-progress project export."""
 
     id: str
     name: str
     status: Literal["pending", "completed", "failed"]
+    # Present only when status is "completed".
     download_url: str | None = Field(default=None, alias="downloadUrl")
+    # Unix milliseconds.
     date: float
-    output_file_type: ReportFileType | None = Field(default=None, alias="outputFileType")
+    output_file_type: ExportFileType | None = Field(default=None, alias="outputFileType")
     progress: float | None = None
-
-    model_config = {"populate_by_name": True}
-
-
-class ReportData(BaseModel):
-    """Report data."""
-
-    access_token: str = Field(alias="accessToken")
-    date: float
-    display_unit_system_id: DisplayUnitSystemId = Field(alias="displayUnitSystemId")
-    file_name: str = Field(alias="fileName")
-    name: str
-    pending: bool
-    template: ReportTemplate
+    # True when the canvas had no content to export.
+    empty: bool | None = None
+    study_id: str | None = Field(default=None, alias="studyId")
+    study_name: str | None = Field(default=None, alias="studyName")
 
     model_config = {"populate_by_name": True}
 
@@ -1005,6 +777,37 @@ class SheetVersionData(BaseModel):
     sheet_file_id: str = Field(alias="sheetFileId")
     sheet_file_page_id: str = Field(alias="sheetFilePageId")
     source_file_name: str = Field(alias="sourceFileName")
+
+    model_config = {"populate_by_name": True}
+
+
+class SheetFilePageData(BaseModel):
+    """One page of an uploaded sheet file.
+
+    ``ai_processing``, ``auto_takeoff``, and ``png`` hold server-generated
+    processing state and are kept as the API returns them.
+    """
+
+    ai_processing: dict[str, Any] = Field(alias="aiProcessing")
+    auto_takeoff: dict[str, Any] | None = Field(default=None, alias="autoTakeoff")
+    created_at: float = Field(alias="createdAt")
+    custom_scale_info: CustomScaleInfo | None = Field(default=None, alias="customScaleInfo")
+    # Inches.
+    default_ceiling_height: float | None = Field(default=None, alias="defaultCeilingHeight")
+    # Inches.
+    default_slab_height: float | None = Field(default=None, alias="defaultSlabHeight")
+    markdown: str | None = None
+    ocr_detected_level: float | None = Field(default=None, alias="ocrDetectedLevel")
+    ocr_detected_top_level: float | None = Field(default=None, alias="ocrDetectedTopLevel")
+    page_number: float = Field(alias="pageNumber")
+    pdf_url: str = Field(alias="pdfUrl")
+    png: dict[str, Any]
+    # Real inches per paper inch: 48 for 1/4" = 1'-0".
+    scale: float = Field(gt=0)
+    sheet_file_id: str = Field(alias="sheetFileId")
+    sheet_number: str = Field(alias="sheetNumber")
+    source_file_name: str = Field(alias="sourceFileName")
+    title: str | None = None
 
     model_config = {"populate_by_name": True}
 
@@ -1177,17 +980,19 @@ class Project(ProjectData):
 
 
 class ProjectSubcollections(BaseModel):
-    """Project subcollections."""
+    """Project subcollections. Each field is one v0 ``expand`` key."""
 
-    branch_types: dict[str, BranchTypeData] | None = Field(default=None, alias="branchTypes")
+    annotations: dict[str, AnnotationData] | None = None
     deadlines: dict[str, DeadlineData] | None = None
     door_types: dict[str, DoorTypeData] | None = Field(default=None, alias="doorTypes")
     duct_types: dict[str, DuctTypeData] | None = Field(default=None, alias="ductTypes")
+    exports: dict[str, APIExport] | None = None
     graph: Graph | None = None
-    pipe_types: dict[str, PipeTypeData] | None = Field(default=None, alias="pipeTypes")
     register_types: dict[str, RegisterTypeData] | None = Field(default=None, alias="registerTypes")
-    reports: dict[str, APIReport] | None = None
     roof_types: dict[str, RoofTypeData] | None = Field(default=None, alias="roofTypes")
+    sheet_file_pages: dict[str, SheetFilePageData] | None = Field(
+        default=None, alias="sheetFilePages"
+    )
     sheet_files: dict[str, SheetFileData] | None = Field(default=None, alias="sheetFiles")
     sheets: dict[str, SheetData] | None = None
     slab_types: dict[str, SlabTypeData] | None = Field(default=None, alias="slabTypes")
@@ -1204,12 +1009,10 @@ class ProjectSubcollections(BaseModel):
 class WritableProjectSubcollections(BaseModel):
     """Project subcollections accepted by create and update requests."""
 
-    branch_types: dict[str, BranchTypeData] | None = Field(default=None, alias="branchTypes")
     deadlines: dict[str, DeadlineData] | None = None
     door_types: dict[str, DoorTypeData] | None = Field(default=None, alias="doorTypes")
     duct_types: dict[str, DuctTypeData] | None = Field(default=None, alias="ductTypes")
     graph: Graph | None = None
-    pipe_types: dict[str, PipeTypeData] | None = Field(default=None, alias="pipeTypes")
     register_types: dict[str, RegisterTypeData] | None = Field(default=None, alias="registerTypes")
     roof_types: dict[str, RoofTypeData] | None = Field(default=None, alias="roofTypes")
     sheet_files: dict[str, SheetFileData] | None = Field(default=None, alias="sheetFiles")
@@ -1302,12 +1105,10 @@ class ExpandedProjectPatch(BaseModel):
     weather_spec: WeatherSpec | None = Field(default=None, alias="weatherSpec")
     year_built: str | None = Field(default=None, alias="yearBuilt")
     # Subcollections
-    branch_types: dict[str, BranchTypeData] | None = Field(default=None, alias="branchTypes")
     deadlines: dict[str, DeadlineData] | None = None
     door_types: dict[str, DoorTypeData] | None = Field(default=None, alias="doorTypes")
     duct_types: dict[str, DuctTypeData] | None = Field(default=None, alias="ductTypes")
     graph: Graph | None = None
-    pipe_types: dict[str, PipeTypeData] | None = Field(default=None, alias="pipeTypes")
     register_types: dict[str, RegisterTypeData] | None = Field(default=None, alias="registerTypes")
     roof_types: dict[str, RoofTypeData] | None = Field(default=None, alias="roofTypes")
     sheet_files: dict[str, SheetFileData] | None = Field(default=None, alias="sheetFiles")
