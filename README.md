@@ -198,6 +198,8 @@ are not in this SDK yet:
 - `searchProducts({ type })`: `list_products` has no `type` filter.
 - Graph nodes of type `AIR_CLEANER`, `PUMP`, `VALVE`, and `TERMINAL_EQUIPMENT`
   are not modeled. A graph that contains one fails validation.
+- `ExpandedProjectPost` and `ExpandedProjectPatch` have no `annotations` or
+  `sheetFilePages` fields. Send those writes as a plain `dict`.
 
 `download_sheet` and `download_file` have no TypeScript equivalent yet.
 

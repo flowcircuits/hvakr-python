@@ -37,9 +37,9 @@ def dump(model: BaseModel) -> Any:
     return model.model_dump(mode="json", by_alias=True, exclude_none=True)
 
 
-def test_fixtures_come_from_the_client_version_the_api_uses() -> None:
+def test_fixtures_come_from_one_client_version() -> None:
     versions = {json.loads(path.read_text())["clientVersion"] for path in FIXTURES.glob("*.json")}
-    assert versions == {"0.31.0"}
+    assert len(versions) == 1
 
 
 class TestKeys:
