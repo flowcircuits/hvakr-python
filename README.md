@@ -1,5 +1,8 @@
 # HVAKR Python SDK
 
+> [!WARNING]
+> **This SDK is no longer maintained, and this repository is archived.** It does not match the current HVAKR API: `get_project_calculations` fails to parse the response, which now returns `findings` instead of `flags`. Use the [TypeScript SDK (`@hvakr/client`)](https://github.com/flowcircuits/hvakr-client) or call the [REST API](https://api.hvakr.com/v0/docs/) directly.
+
 Official Python SDK for the [HVAKR API](https://hvakr.com) - HVAC load calculation and building analysis.
 
 ## Installation
